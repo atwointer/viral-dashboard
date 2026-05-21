@@ -246,12 +246,12 @@ def build_matched_kpis(df: pd.DataFrame) -> dict[str, float]:
     return {
         "총 작업 수": float(len(df)),
         "총 비용": total_cost,
-        "매칭 고객수": float(df["customer_count"].sum()),
-        "매칭 유입수": float(df["inflow_count"].sum()),
-        "매칭 페이지수": float(df["page_count"].sum()),
-        "매칭 결제수": float(df["payment_count"].sum()),
-        "매칭 결제금액": payment_amount,
-        "매칭 ROAS": roas,
+        "고객수": float(df["customer_count"].sum()),
+        "유입수": float(df["inflow_count"].sum()),
+        "클릭수": float(df["page_count"].sum()),
+        "결제수": float(df["payment_count"].sum()),
+        "결제금액": payment_amount,
+        "ROAS": roas,
     }
 
 
