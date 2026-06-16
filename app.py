@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import re
 import unicodedata
 
@@ -260,7 +261,43 @@ def get_dashboard_data() -> dict[str, pd.DataFrame]:
     return load_data()
 
 
+def check_password() -> bool:
+    """비밀번호 게이트. secrets에 설정된 값과 일치할 때만 대시보드를 연다."""
+    if st.session_state.get("password_ok"):
+        return True
+
+    expected = st.secrets.get("app_password", "")
+    if not expected:
+        st.error(
+            "로그인 비밀번호가 설정되지 않았습니다. "
+            ".streamlit/secrets.toml 파일에 app_password 값을 지정하세요."
+        )
+        return False
+
+    def _verify() -> None:
+        entered = st.session_state.get("password_input", "")
+        if hmac.compare_digest(str(entered), str(expected)):
+            st.session_state["password_ok"] = True
+            st.session_state.pop("password_input", None)
+        else:
+            st.session_state["password_ok"] = False
+
+    st.markdown(DARK_CSS, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-shell"><div class="hero-title">바이럴 운영 대시보드</div>'
+        '<div class="hero-subtitle">접속하려면 비밀번호를 입력하세요.</div></div>',
+        unsafe_allow_html=True,
+    )
+    st.text_input("비밀번호", type="password", key="password_input", on_change=_verify)
+    if st.session_state.get("password_ok") is False:
+        st.error("비밀번호가 올바르지 않습니다.")
+    return False
+
+
 def main() -> None:
+    if not check_password():
+        return
+
     st.markdown('<meta name="google" content="notranslate">', unsafe_allow_html=True)
     st.markdown(DARK_CSS, unsafe_allow_html=True)
 
