@@ -332,6 +332,8 @@ def match_paid_with_performance(
         return empty, empty.copy()
 
     perf_lookup = performance_df.copy()
+    # 날짜 없는 성과행은 작업 시점을 특정할 수 없어 매칭에서 제외(미매칭 처리)
+    perf_lookup = perf_lookup[perf_lookup["nt_keyword"].map(keyword_has_date)].copy()
     perf_lookup["match_key"] = perf_lookup.apply(
         lambda row: build_match_key(row["nt_source"], row["nt_detail"], row["nt_keyword"]),
         axis=1,
@@ -429,9 +431,34 @@ def build_match_key(nt_source: str, nt_detail: str, nt_keyword: str) -> str:
         [
             normalize_nt_source(nt_source),
             normalize_match_text(nt_detail),
-            normalize_match_text(nt_keyword),
+            normalize_keyword_token(nt_keyword),
         ]
     )
+
+
+# 완료시트(한글)와 성과DB(영어)의 제품 표기 차이를 흡수하기 위한 치환표
+KEYWORD_KO_EN = {
+    "오픈이어": "openear",
+    "키보드": "keyboard",
+    "본": "bone",
+    "네온": "neon",
+    "플렉스": "flex",
+    "프로": "pro",
+}
+
+
+def keyword_has_date(value: object) -> bool:
+    """성과DB 키워드가 날짜(6~8자리)로 시작하는지."""
+    return bool(re.match(r"^\d{6,8}", clean_text(value)))
+
+
+def normalize_keyword_token(value: object) -> str:
+    """매칭용 키워드 정규화: 소문자/공백제거 + 날짜접두어 제거 + 한글→영어 + 특수문자 제거."""
+    text = normalize_match_text(value)
+    text = re.sub(r"^\d{6,8}_?", "", text)
+    for korean, english in KEYWORD_KO_EN.items():
+        text = text.replace(korean, english)
+    return re.sub(r"[^a-z0-9가-힣]", "", text)
 
 
 def find_reverse_match(
@@ -612,6 +639,7 @@ def normalize_nt_source(value: object) -> str:
         "인스타": "instagram",
         "인스타그램": "instagram",
         "instagram": "instagram",
+        "insta": "instagram",
         "유튜브": "youtube",
         "youtube": "youtube",
         "x": "x",
