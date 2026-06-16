@@ -226,7 +226,7 @@ def standardize_paid_sheet(df: pd.DataFrame, platform_group: str, sheet_name: st
                 ),
                 "keyword": first_non_empty_series(
                     get_series_by_alias(clean_df, ["키워드"]),
-                    get_series_by_alias(clean_df, ["상품명", "상품"]),
+                    get_series_by_alias(clean_df, ["제안상품", "제안제품", "상품명", "제품명", "상품"]),
                 ).map(clean_text),
                 "url": get_link_series(clean_df).map(clean_text),
                 "notes": get_series_by_alias(clean_df, ["비고", "메모"]).map(clean_text),
