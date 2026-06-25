@@ -177,6 +177,7 @@ DARK_CSS = """
     }
     .kpi-card.primary-d .kpi-label,
     .kpi-card.primary-d .kpi-value { color: #172033; }
+    .kpi-card.primary-e { background: linear-gradient(135deg, #e0528d 0%, #ed6f9f 56%, #f18ab0 100%); }
     .kpi-card.secondary {
         background: linear-gradient(180deg, rgba(15, 21, 36, 0.98) 0%, rgba(18, 27, 45, 0.98) 100%);
         border: 1px solid var(--line);
@@ -425,8 +426,8 @@ def render_kpi_section(df: pd.DataFrame) -> None:
     st.markdown('<div class="section-title">핵심 KPI</div>', unsafe_allow_html=True)
     primary_metrics, secondary_metrics = build_kpis(df)
 
-    primary_classes = ["primary-a", "primary-b", "primary-c", "primary-d"]
-    primary_columns = st.columns(4)
+    primary_classes = ["primary-a", "primary-b", "primary-c", "primary-d", "primary-e"]
+    primary_columns = st.columns(len(primary_metrics))
     for column, metric, card_class in zip(primary_columns, primary_metrics, primary_classes, strict=False):
         with column:
             st.markdown(render_kpi_card(metric, card_class), unsafe_allow_html=True)
@@ -451,13 +452,16 @@ def build_kpis(df: pd.DataFrame) -> tuple[list[dict[str, str]], list[dict[str, s
         matched_only = df.iloc[0:0]
     matched_cost = float(matched_only["cost"].fillna(0).sum())
     matched_payment_amount = float(matched_only["payment_amount"].fillna(0).sum())
+    matched_inflow_count = float(matched_only["inflow_count"].fillna(0).sum())
     roas_matched = (matched_payment_amount / matched_cost * 100) if matched_cost else 0
+    cpv_matched = (matched_cost / matched_inflow_count) if matched_inflow_count else 0
 
     primary = [
         {"label": "고객수", "value": format_number(df["customer_count"].fillna(0).sum())},
         {"label": "유입수", "value": format_number(df["inflow_count"].fillna(0).sum())},
         {"label": "클릭수", "value": format_number(df["page_count"].fillna(0).sum())},
         {"label": "ROAS (매칭분)", "value": format_percent(roas_matched)},
+        {"label": "CPV (매칭분)", "value": format_currency(cpv_matched)},
     ]
     secondary = [
         {"label": "총 비용", "value": format_currency(total_cost)},
@@ -721,12 +725,17 @@ def render_tables(df: pd.DataFrame) -> None:
     st.markdown('<div class="section-title">작업 리스트</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-caption">실행 결과와 미매칭 사유를 한 번에 확인할 수 있게 정리했습니다.</div>', unsafe_allow_html=True)
 
+    table_source = df.copy()
+    worker_totals = table_source.groupby("worker", dropna=False)[["cost", "inflow_count"]].transform("sum")
+    worker_cpv = worker_totals["cost"] / worker_totals["inflow_count"]
+    table_source["worker_cpv"] = worker_cpv.where(worker_totals["inflow_count"].ne(0), 0).fillna(0)
+
     detail_columns = [
         "date", "platform", "worker", "product_name", "manager", "transfer_status",
-        "cost", "keyword", "customer_count", "inflow_count", "page_count",
+        "cost", "worker_cpv", "keyword", "customer_count", "inflow_count", "page_count",
         "payment_count", "payment_amount", "match_status",
     ]
-    detail_df = df.reindex(columns=detail_columns).copy()
+    detail_df = table_source.reindex(columns=detail_columns).copy()
     detail_df = detail_df.rename(columns={
         "date": "일자",
         "platform": "플랫폼",
@@ -735,6 +744,7 @@ def render_tables(df: pd.DataFrame) -> None:
         "manager": "담당자",
         "transfer_status": "이체여부",
         "cost": "비용",
+        "worker_cpv": "작업자 CPV",
         "keyword": "키워드",
         "customer_count": "고객수",
         "inflow_count": "유입수",
@@ -744,7 +754,7 @@ def render_tables(df: pd.DataFrame) -> None:
         "match_status": "매칭상태",
     })
     detail_df["일자"] = pd.to_datetime(detail_df["일자"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
-    for currency_column in ["비용", "결제금액"]:
+    for currency_column in ["비용", "작업자 CPV", "결제금액"]:
         detail_df[currency_column] = detail_df[currency_column].fillna(0).map(format_currency)
     st.dataframe(detail_df, use_container_width=True, hide_index=True)
 
