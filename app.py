@@ -483,7 +483,6 @@ def render_chart_section(df: pd.DataFrame) -> None:
 
     platform_perf = summarize_by_platform(df)
     daily_trend = build_time_series(df, "D")
-    monthly_trend = build_time_series(df, "M")
     worker_perf = summarize_by_worker(df, limit=7)
 
     top_left, top_right = st.columns(2)
@@ -494,16 +493,6 @@ def render_chart_section(df: pd.DataFrame) -> None:
     with top_right:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.plotly_chart(build_daily_trend_chart(daily_trend), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    middle_left, middle_right = st.columns(2)
-    with middle_left:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.plotly_chart(build_monthly_trend_chart(monthly_trend), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with middle_right:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.plotly_chart(build_platform_roas_scatter(platform_perf), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     bottom_left, bottom_right = st.columns(2)
