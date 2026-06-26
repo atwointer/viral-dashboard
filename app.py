@@ -227,6 +227,11 @@ DARK_CSS = """
     div[data-testid="stDataFrame"] [role="columnheader"] {
         font-weight: 800;
     }
+    div[data-testid="stDataFrame"] .glideDataEditor,
+    div[data-testid="stDataFrame"] canvas {
+        background: #ffffff !important;
+        color: #111111 !important;
+    }
     .stButton button {
         background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
         color: white;
@@ -572,12 +577,11 @@ def render_recent_four_week_summary(df: pd.DataFrame) -> None:
     for percent_column in ["ROAS", "비용대비유입효율률"]:
         display_df[percent_column] = display_df[percent_column].fillna(0).map(format_percent)
 
-    def highlight_total_row(row):
-        if row.name == len(display_df) - 1:
-            return ["background-color: #dbeafe; color: #111111; font-weight: 800;" for _ in row]
-        return ["" for _ in row]
-
-    st.dataframe(display_df.style.apply(highlight_total_row, axis=1), use_container_width=True, hide_index=True)
+    st.dataframe(
+        style_table(display_df, total_row_index=len(display_df) - 1),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def build_recent_four_week_summary(df: pd.DataFrame, start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
@@ -857,7 +861,7 @@ def render_tables(df: pd.DataFrame) -> None:
     for currency_column in ["비용", "작업자별 CPV", "결제금액"]:
         detail_df[currency_column] = detail_df[currency_column].fillna(0).map(format_currency)
     detail_df["작업자별 비용대비유입효율률"] = detail_df["작업자별 비용대비유입효율률"].fillna(0).map(format_percent)
-    st.dataframe(detail_df, use_container_width=True, hide_index=True)
+    st.dataframe(style_table(detail_df), use_container_width=True, hide_index=True)
 
     unmatched_df = df.loc[
         df["match_status"] == "미매칭",
@@ -873,7 +877,7 @@ def render_tables(df: pd.DataFrame) -> None:
     })
     unmatched_df["일자"] = pd.to_datetime(unmatched_df["일자"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
     st.markdown('<div class="section-title" style="font-size:1.2rem; margin-top:1.1rem;">매칭 실패 리스트</div>', unsafe_allow_html=True)
-    st.dataframe(unmatched_df, use_container_width=True, hide_index=True)
+    st.dataframe(style_table(unmatched_df), use_container_width=True, hide_index=True)
 
 
 def render_performance_totals(performance_df: pd.DataFrame) -> None:
@@ -959,6 +963,46 @@ def format_percent(value: float) -> str:
 
 def format_number(value: float | int) -> str:
     return f"{float(value):,.0f}"
+
+
+def style_table(df: pd.DataFrame, total_row_index: int | None = None):
+    styler = df.style.set_properties(
+        **{
+            "background-color": "#ffffff",
+            "color": "#111111",
+            "border-color": "#e5eaf2",
+        }
+    ).set_table_styles(
+        [
+            {
+                "selector": "th",
+                "props": [
+                    ("background-color", "#f8fafc"),
+                    ("color", "#111111"),
+                    ("font-weight", "800"),
+                    ("border-color", "#e5eaf2"),
+                ],
+            },
+            {
+                "selector": "td",
+                "props": [
+                    ("background-color", "#ffffff"),
+                    ("color", "#111111"),
+                    ("border-color", "#e5eaf2"),
+                ],
+            },
+        ]
+    )
+
+    if total_row_index is None:
+        return styler
+
+    def highlight_total_row(row):
+        if row.name == total_row_index:
+            return ["background-color: #dbeafe; color: #111111; font-weight: 800;" for _ in row]
+        return ["" for _ in row]
+
+    return styler.apply(highlight_total_row, axis=1)
 
 
 def apply_currency_yaxis(fig) -> None:
