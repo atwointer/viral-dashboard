@@ -211,6 +211,21 @@ DARK_CSS = """
         border-radius: 22px;
         overflow: hidden;
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+        background: #ffffff;
+        color: #111111;
+    }
+    div[data-testid="stDataFrame"] * {
+        color: #111111;
+    }
+    div[data-testid="stDataFrame"] [role="grid"],
+    div[data-testid="stDataFrame"] [role="row"],
+    div[data-testid="stDataFrame"] [role="columnheader"],
+    div[data-testid="stDataFrame"] [role="gridcell"] {
+        background-color: #ffffff;
+        color: #111111;
+    }
+    div[data-testid="stDataFrame"] [role="columnheader"] {
+        font-weight: 800;
     }
     .stButton button {
         background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
@@ -559,7 +574,7 @@ def render_recent_four_week_summary(df: pd.DataFrame) -> None:
 
     def highlight_total_row(row):
         if row.name == len(display_df) - 1:
-            return ["background-color: #2f3f76; color: #ffffff; font-weight: 800;" for _ in row]
+            return ["background-color: #dbeafe; color: #111111; font-weight: 800;" for _ in row]
         return ["" for _ in row]
 
     st.dataframe(display_df.style.apply(highlight_total_row, axis=1), use_container_width=True, hide_index=True)
@@ -962,14 +977,15 @@ def apply_common_layout(fig) -> None:
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#ffffff",
-        font=dict(color="#172033"),
+        font=dict(color="#111111"),
         legend_title_text="",
+        legend=dict(font=dict(color="#111111")),
         margin=dict(l=18, r=18, t=60, b=18),
-        hoverlabel=dict(bgcolor="#ffffff", font_color="#172033", bordercolor="#dbe4f0"),
-        title_font=dict(size=18, color="#172033"),
+        hoverlabel=dict(bgcolor="#ffffff", font_color="#111111", bordercolor="#dbe4f0"),
+        title_font=dict(size=18, color="#111111"),
     )
-    fig.update_xaxes(gridcolor="#e5eaf2", zerolinecolor="#dbe4f0")
-    fig.update_yaxes(gridcolor="#e5eaf2", zerolinecolor="#dbe4f0")
+    fig.update_xaxes(gridcolor="#e5eaf2", zerolinecolor="#dbe4f0", tickfont=dict(color="#111111"), title_font=dict(color="#111111"))
+    fig.update_yaxes(gridcolor="#e5eaf2", zerolinecolor="#dbe4f0", tickfont=dict(color="#111111"), title_font=dict(color="#111111"))
     fig.update_xaxes(showgrid=False, zeroline=False)
     fig.update_yaxes(zeroline=False)
 
@@ -979,7 +995,7 @@ def empty_figure(title: str):
     fig.update_layout(
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
-        annotations=[dict(text="표시할 데이터가 없습니다.", showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper", font=dict(color="#94a3b8", size=14))],
+        annotations=[dict(text="표시할 데이터가 없습니다.", showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper", font=dict(color="#111111", size=14))],
     )
     apply_common_layout(fig)
     return fig
