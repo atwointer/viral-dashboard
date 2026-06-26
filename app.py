@@ -499,6 +499,8 @@ def render_chart_section(df: pd.DataFrame) -> None:
         st.plotly_chart(build_worker_performance_chart(worker_perf), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+    render_recent_four_week_summary(df)
+
 
 def summarize_by_platform(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -529,6 +531,93 @@ def summarize_by_worker(df: pd.DataFrame, limit: int = 7) -> pd.DataFrame:
     grouped["worker"] = grouped["worker"].replace("", "미기재")
     grouped = grouped.sort_values("payment_amount", ascending=False).head(limit)
     return grouped.sort_values("payment_amount", ascending=True)
+
+
+def render_recent_four_week_summary(df: pd.DataFrame) -> None:
+    today = pd.Timestamp.today().normalize()
+    start_date = today - pd.Timedelta(weeks=4)
+    summary_df = build_recent_four_week_summary(df, start_date, today)
+
+    st.markdown('<div class="section-title" style="font-size:1.2rem; margin-top:0.7rem;">최근 4주 작업자별 성과 요약</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="section-caption">{start_date:%Y-%m-%d}부터 {today:%Y-%m-%d}까지의 바이럴 비용, 유입, 결제금액, 클릭, ROAS, 비용대비유입효율률입니다.</div>',
+        unsafe_allow_html=True,
+    )
+
+    display_df = summary_df.rename(columns={
+        "worker": "작업자",
+        "cost": "바이럴 비용",
+        "inflow_count": "유입",
+        "payment_amount": "결제금액",
+        "page_count": "클릭",
+        "roas": "ROAS",
+        "inflow_efficiency": "비용대비유입효율률",
+    })
+    for currency_column in ["바이럴 비용", "결제금액"]:
+        display_df[currency_column] = display_df[currency_column].fillna(0).map(format_currency)
+    for count_column in ["유입", "클릭"]:
+        display_df[count_column] = display_df[count_column].fillna(0).map(format_number)
+    for percent_column in ["ROAS", "비용대비유입효율률"]:
+        display_df[percent_column] = display_df[percent_column].fillna(0).map(format_percent)
+
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+
+def build_recent_four_week_summary(df: pd.DataFrame, start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
+    columns = ["worker", "cost", "inflow_count", "payment_amount", "page_count", "roas", "inflow_efficiency"]
+    if df.empty:
+        return pd.DataFrame([{
+            "worker": "4주 총합",
+            "cost": 0,
+            "inflow_count": 0,
+            "payment_amount": 0,
+            "page_count": 0,
+            "roas": 0,
+            "inflow_efficiency": 0,
+        }], columns=columns)
+
+    dated = df.copy()
+    dated["date"] = pd.to_datetime(dated["date"], errors="coerce")
+    end_dt = end_date + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    recent = dated[(dated["date"] >= start_date) & (dated["date"] <= end_dt)].copy()
+    if recent.empty:
+        return pd.DataFrame([{
+            "worker": "4주 총합",
+            "cost": 0,
+            "inflow_count": 0,
+            "payment_amount": 0,
+            "page_count": 0,
+            "roas": 0,
+            "inflow_efficiency": 0,
+        }], columns=columns)
+
+    grouped = (
+        recent.groupby("worker", dropna=False, as_index=False)[["cost", "inflow_count", "payment_amount", "page_count"]]
+        .sum()
+        .fillna(0)
+    )
+    grouped["worker"] = grouped["worker"].replace("", "미기재")
+    grouped["roas"] = grouped.apply(
+        lambda row: (row["payment_amount"] / row["cost"] * 100) if row["cost"] else 0,
+        axis=1,
+    )
+    grouped["inflow_efficiency"] = calculate_inflow_efficiency(grouped["cost"], grouped["inflow_count"])
+    grouped = grouped.sort_values("cost", ascending=False)
+
+    total = pd.DataFrame([{
+        "worker": "4주 총합",
+        "cost": float(recent["cost"].fillna(0).sum()),
+        "inflow_count": float(recent["inflow_count"].fillna(0).sum()),
+        "payment_amount": float(recent["payment_amount"].fillna(0).sum()),
+        "page_count": float(recent["page_count"].fillna(0).sum()),
+    }])
+    total["roas"] = total.apply(
+        lambda row: (row["payment_amount"] / row["cost"] * 100) if row["cost"] else 0,
+        axis=1,
+    )
+    total["inflow_efficiency"] = calculate_inflow_efficiency(total["cost"], total["inflow_count"])
+
+    return pd.concat([grouped, total], ignore_index=True)[columns]
 
 
 def build_time_series(df: pd.DataFrame, frequency: str) -> pd.DataFrame:
