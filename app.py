@@ -487,27 +487,16 @@ def render_chart_section(df: pd.DataFrame) -> None:
     st.markdown('<div class="section-caption">핵심 비교는 크게, 보조 비교는 압축해서 배치했습니다.</div>', unsafe_allow_html=True)
 
     platform_perf = summarize_by_platform(df)
-    daily_trend = build_time_series(df, "D")
     worker_perf = summarize_by_worker(df, limit=7)
 
-    top_left, top_right = st.columns(2)
-    with top_left:
+    left_column, right_column = st.columns(2)
+    with left_column:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.plotly_chart(build_platform_performance_chart(platform_perf), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
-    with top_right:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.plotly_chart(build_daily_trend_chart(daily_trend), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    bottom_left, bottom_right = st.columns(2)
-    with bottom_left:
+    with right_column:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.plotly_chart(build_worker_performance_chart(worker_perf), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with bottom_right:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.plotly_chart(build_payment_share_donut(platform_perf), use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 
