@@ -578,7 +578,7 @@ def collapse_cumulative_performance_rows(
             row_data[metric] = to_numeric_series(latest_group[metric]).fillna(0).sum()
 
         for metric in MAX_VALUE_METRICS:
-            row_data[metric] = to_numeric_series(group[metric]).fillna(0).max()
+            row_data[metric] = to_numeric_series(latest_group[metric]).fillna(0).sum()
 
         collapsed_rows.append(row_data)
 
