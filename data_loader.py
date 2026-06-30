@@ -280,10 +280,10 @@ def finalize_performance_df(df: pd.DataFrame) -> pd.DataFrame:
 
     working["nt_source"] = get_series_by_alias(
         working,
-        ["nt_source", "ntsource", "소스", "매체", "플랫폼"],
+        ["nt_source", "ntsource", "소스", "매체", "플랫폼", "채널"],
     ).map(normalize_nt_source)
     working["nt_detail"] = first_non_empty_series(
-        get_series_by_alias(working, ["nt_detail", "ntdetail", "상세", "작업자", "계정"]),
+        get_series_by_alias(working, ["nt_detail", "ntdetail", "상세", "작업자", "작업자명", "계정"]),
         get_series_by_alias(working, ["닉네임", "운영자"]),
     ).map(normalize_match_text)
     working["nt_keyword"] = first_non_empty_series(
