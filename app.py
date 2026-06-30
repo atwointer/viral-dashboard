@@ -966,7 +966,8 @@ def format_number(value: float | int) -> str:
 
 
 def style_table(df: pd.DataFrame, total_row_index: int | None = None):
-    styler = df.style.set_properties(
+    display_df = df.reset_index(drop=True)
+    styler = display_df.style.set_properties(
         **{
             "background-color": "#ffffff",
             "color": "#111111",
