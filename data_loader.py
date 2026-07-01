@@ -37,6 +37,9 @@ PAID_COLUMNS = [
     "url",
     "notes",
     "source_sheet",
+    "source_inflow_count",
+    "source_payment_amount",
+    "source_roas",
     "match_nt_source",
     "match_nt_detail",
     "match_nt_keyword",
@@ -198,6 +201,9 @@ def standardize_paid_sheet(df: pd.DataFrame, platform_group: str, sheet_name: st
                 "url": get_link_series(clean_df).map(clean_text),
                 "notes": get_series_by_alias(clean_df, ["비고", "메모"]).map(clean_text),
                 "source_sheet": sheet_name,
+                "source_inflow_count": to_numeric_series(get_series_by_alias(clean_df, ["유입수", "유입 수", "유입"])),
+                "source_payment_amount": to_numeric_series(get_series_by_alias(clean_df, ["결제금액", "전환금액", "매출"])),
+                "source_roas": to_numeric_series(get_series_by_alias(clean_df, ["ROAS", "roas"])),
             }
         )
     else:
@@ -231,6 +237,9 @@ def standardize_paid_sheet(df: pd.DataFrame, platform_group: str, sheet_name: st
                 "url": get_link_series(clean_df).map(clean_text),
                 "notes": get_series_by_alias(clean_df, ["비고", "메모"]).map(clean_text),
                 "source_sheet": sheet_name,
+                "source_inflow_count": to_numeric_series(get_series_by_alias(clean_df, ["유입수", "유입 수", "유입"])),
+                "source_payment_amount": to_numeric_series(get_series_by_alias(clean_df, ["결제금액", "전환금액", "매출"])),
+                "source_roas": to_numeric_series(get_series_by_alias(clean_df, ["ROAS", "roas"])),
             }
         )
 
@@ -259,6 +268,9 @@ def finalize_paid_df(df: pd.DataFrame) -> pd.DataFrame:
     result["url"] = result["url"].map(clean_text)
     result["notes"] = result["notes"].map(clean_text)
     result["cost"] = to_numeric_series(result["cost"]).fillna(0)
+    result["source_inflow_count"] = to_numeric_series(result["source_inflow_count"]).fillna(0)
+    result["source_payment_amount"] = to_numeric_series(result["source_payment_amount"]).fillna(0)
+    result["source_roas"] = to_numeric_series(result["source_roas"]).fillna(0)
     result["match_nt_detail"] = result["worker"].map(normalize_match_text)
     result["match_nt_keyword"] = result["keyword"].map(normalize_match_text)
     result["match_nt_source"] = result.apply(build_primary_nt_source, axis=1)
@@ -393,6 +405,7 @@ def match_paid_with_performance(
             record["perf_latest_collected_at"] = ""
             record["unmatched_reason"] = infer_unmatched_reason(row)
 
+        apply_paid_source_metrics(record)
         records.append(record)
 
     matched_df = pd.DataFrame(records)
@@ -403,6 +416,20 @@ def match_paid_with_performance(
 def build_primary_nt_source(row: pd.Series) -> str:
     candidates = build_nt_source_candidates(row)
     return candidates[0] if candidates else ""
+
+
+def apply_paid_source_metrics(record: dict) -> None:
+    source_inflow_count = numeric_value(record.get("source_inflow_count", 0))
+    source_payment_amount = numeric_value(record.get("source_payment_amount", 0))
+    source_roas = numeric_value(record.get("source_roas", 0))
+    cost = numeric_value(record.get("cost", 0))
+
+    if source_inflow_count > 0:
+        record["inflow_count"] = source_inflow_count
+    if source_payment_amount > 0:
+        record["payment_amount"] = source_payment_amount
+    elif source_roas > 0 and cost > 0:
+        record["payment_amount"] = cost * source_roas / 100
 
 
 def collapse_duplicate_match_keys(perf_lookup: pd.DataFrame) -> pd.DataFrame:
@@ -733,6 +760,13 @@ def to_numeric_series(series: pd.Series | pd.DataFrame | None) -> pd.Series:
         .str.replace(r"[^\d\.\-]", "", regex=True)
     )
     return pd.to_numeric(text, errors="coerce")
+
+
+def numeric_value(value: object) -> float:
+    converted = to_numeric_series(pd.Series([value]))
+    if converted.empty or pd.isna(converted.iloc[0]):
+        return 0.0
+    return float(converted.iloc[0])
 
 
 def get_series_by_alias(df: pd.DataFrame, aliases: list[str]) -> pd.Series:
