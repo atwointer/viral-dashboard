@@ -53,6 +53,19 @@ function renderCell(row, column){
   if(isNumericColumn(column)) return fmt.format(Number(value) || 0);
   return escapeHtml(value || '—');
 }
+function renderSummaryRow(rows, columns){
+  return `<tr class="summary-row">${columns.map((column,index)=>{
+    const numeric = isNumericColumn(column) || column === '조회수';
+    let content = '—';
+    if(numeric){
+      const total = rows.reduce((sum,row)=>sum+(column==='조회수' ? row.views : Number(cellValue(row,column))||0),0);
+      content = `<strong>${fmt.format(total)}</strong>`;
+    } else if(column === '콘텐츠 이름') content = '<strong>기간 합계</strong>';
+    else if(index === 0 && !columns.includes('콘텐츠 이름')) content = '<strong>기간 합계</strong>';
+    else if(column === '채널') content = `<strong>${fmt.format(rows.length)}건</strong>`;
+    return `<td class="${numeric?'number-cell':''}">${content}</td>`;
+  }).join('')}</tr>`;
+}
 
 function filteredData(){
   const start = parseDate($('#startDate').value); const end = parseDate($('#endDate').value);
@@ -70,7 +83,8 @@ function render(){
     ? ['채널','업로드 날짜','콘텐츠 이름','콘텐츠 주제','담당자','조회수','콘텐츠 링크']
     : (columnsByChannel[activeChannel] || ['담당자','업로드 날짜','콘텐츠 이름','콘텐츠 주제','콘텐츠 링크']);
   $('#contentHead').innerHTML = columns.map(c=>`<th class="${isNumericColumn(c)||c==='조회수'?'number-cell':''}">${c}</th>`).join('');
-  $('#contentRows').innerHTML = rows.map(r=>`<tr>${columns.map(c=>{
+  const summaryRow = rows.length ? renderSummaryRow(rows,columns) : '';
+  $('#contentRows').innerHTML = summaryRow + rows.map(r=>`<tr>${columns.map(c=>{
     const classes=[c==='업로드 날짜'?'date':'',c==='콘텐츠 이름'?'content-title':'',isNumericColumn(c)||c==='조회수'?'number-cell':''].filter(Boolean).join(' ');
     const content = c==='조회수' ? fmt.format(r.views) : renderCell(r,c);
     return `<td class="${classes}">${content}</td>`;
