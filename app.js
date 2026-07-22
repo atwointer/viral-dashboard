@@ -9,6 +9,8 @@ const channels = [
 ];
 
 let allData = []; let activeChannel = 'all';
+const columnsByChannel = {};
+const excludedColumns = new Set(['키워드', '필수 해시태그']);
 const $ = (s) => document.querySelector(s);
 const fmt = new Intl.NumberFormat('ko-KR');
 
@@ -27,12 +29,29 @@ async function loadSheet(channel){
   const text = await fetch(url).then(r=>{ if(!r.ok) throw new Error(r.status); return r.text(); });
   const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}')+1));
   const headers = json.table.cols.map(c => c.label || '');
+  columnsByChannel[channel.key] = headers.filter((h,i) => h && !excludedColumns.has(h) && headers.indexOf(h) === i);
   return json.table.rows.map(row => {
     const obj = {}; headers.forEach((h,i)=>{ if(h && obj[h] === undefined) obj[h] = row.c[i]?.v ?? ''; });
     const title = obj['콘텐츠 이름']; const link = obj['콘텐츠 링크'];
     if (!title && !link) return null;
-    return { channel:channel.key, channelLabel:channel.label, date:parseDate(obj['업로드 날짜']), title:title || '(제목 없음)', topic:obj['콘텐츠 주제'] || '미분류', owner:obj['담당자'] || '—', link:link || '', views:Number(obj[channel.metric]) || 0 };
+    return { channel:channel.key, channelLabel:channel.label, date:parseDate(obj['업로드 날짜']), title:title || '(제목 없음)', topic:obj['콘텐츠 주제'] || '미분류', owner:obj['담당자'] || '—', link:link || '', views:Number(obj[channel.metric]) || 0, raw:obj };
   }).filter(Boolean);
+}
+
+function isNumericColumn(name){ return /수$|전환$/.test(name); }
+function cellValue(row, column){
+  if(column === '채널') return row.channelLabel;
+  if(column === '업로드 날짜') return displayDate(row.date);
+  if(column === '콘텐츠 이름') return row.title;
+  return row.raw?.[column] ?? '';
+}
+function renderCell(row, column){
+  const value = cellValue(row,column);
+  if(column === '콘텐츠 링크') return row.link ? `<a class="view-link" href="${escapeHtml(row.link.trim())}" target="_blank" rel="noopener">열기 ↗</a>` : '—';
+  if(column === '콘텐츠 주제') return `<span class="topic-tag">${escapeHtml(value || '미분류')}</span>`;
+  if(column === '콘텐츠 이름') return escapeHtml(value || '(제목 없음)');
+  if(isNumericColumn(column)) return fmt.format(Number(value) || 0);
+  return escapeHtml(value || '—');
 }
 
 function filteredData(){
@@ -47,7 +66,15 @@ function render(){
   }).join('');
   const rows = scoped.filter(r=>activeChannel==='all'||r.channel===activeChannel).sort((a,b)=>(b.date||0)-(a.date||0));
   $('#resultCount').textContent = `총 ${fmt.format(rows.length)}건`;
-  $('#contentRows').innerHTML = rows.map(r=>`<tr><td class="date">${displayDate(r.date)}</td><td class="content-title">${escapeHtml(r.title)}</td><td><span class="topic-tag">${escapeHtml(r.topic)}</span></td><td>${escapeHtml(r.owner)}</td><td class="number-cell">${fmt.format(r.views)}</td><td>${r.link?`<a class="view-link" href="${escapeHtml(r.link)}" target="_blank" rel="noopener">열기 ↗</a>`:'—'}</td></tr>`).join('');
+  const columns = activeChannel === 'all'
+    ? ['채널','업로드 날짜','콘텐츠 이름','콘텐츠 주제','담당자','조회수','콘텐츠 링크']
+    : (columnsByChannel[activeChannel] || ['담당자','업로드 날짜','콘텐츠 이름','콘텐츠 주제','콘텐츠 링크']);
+  $('#contentHead').innerHTML = columns.map(c=>`<th class="${isNumericColumn(c)||c==='조회수'?'number-cell':''}">${c}</th>`).join('');
+  $('#contentRows').innerHTML = rows.map(r=>`<tr>${columns.map(c=>{
+    const classes=[c==='업로드 날짜'?'date':'',c==='콘텐츠 이름'?'content-title':'',isNumericColumn(c)||c==='조회수'?'number-cell':''].filter(Boolean).join(' ');
+    const content = c==='조회수' ? fmt.format(r.views) : renderCell(r,c);
+    return `<td class="${classes}">${content}</td>`;
+  }).join('')}</tr>`).join('');
   $('#emptyState').hidden = rows.length>0; $('table').hidden = rows.length===0;
   const start=$('#startDate').value, end=$('#endDate').value;
   $('#periodLabel').textContent = start||end ? `${start||'처음'} — ${end||'현재'}` : '전체 업로드 기간';
