@@ -11,6 +11,9 @@ import streamlit as st
 from data_loader import build_match_key, load_data
 
 
+APP_VERSION = "2026-07-24-worker-fallback-v2"
+
+
 st.set_page_config(
     page_title="바이럴 운영 대시보드",
     page_icon="📊",
@@ -380,6 +383,7 @@ def render_header(source_meta: pd.Series, matched_df: pd.DataFrame) -> None:
                 <div class="badge">원본 시트: {source_url}</div>
                 <div class="badge">집계 규칙: {collection_rule or "미기재"}</div>
                 <div class="badge">최신 수집일: {latest_collection_date or "미기재"}</div>
+                <div class="badge">빌드: {APP_VERSION}</div>
             </div>
         </div>
         """,
@@ -836,7 +840,7 @@ def render_tables(df: pd.DataFrame) -> None:
     detail_columns = [
         "date", "platform", "worker", "product_name", "manager", "transfer_status",
         "cost", "worker_cpv", "worker_inflow_efficiency", "keyword", "customer_count", "inflow_count", "page_count",
-        "payment_count", "payment_amount", "match_status",
+        "payment_count", "payment_amount", "match_status", "match_method",
     ]
     detail_df = table_source.reindex(columns=detail_columns).copy()
     detail_df = detail_df.rename(columns={
@@ -856,6 +860,7 @@ def render_tables(df: pd.DataFrame) -> None:
         "payment_count": "결제수",
         "payment_amount": "결제금액",
         "match_status": "매칭상태",
+        "match_method": "매칭방식",
     })
     detail_df["일자"] = pd.to_datetime(detail_df["일자"], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
     for currency_column in ["비용", "작업자별 CPV", "결제금액"]:
