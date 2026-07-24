@@ -11,7 +11,7 @@ import streamlit as st
 from data_loader import build_match_key, load_data
 
 
-APP_VERSION = "2026-07-24-force-gid-csv-v4"
+APP_VERSION = "2026-07-24-202607-match-audit-v5"
 
 
 st.set_page_config(
@@ -368,6 +368,8 @@ def render_header(source_meta: pd.Series, matched_df: pd.DataFrame) -> None:
     performance_sheet_shapes = str(source_meta.get("performance_sheet_shapes", ""))
     performance_raw_rows = int(source_meta.get("performance_raw_rows", 0) or 0)
     performance_rows = int(source_meta.get("performance_rows", 0) or 0)
+    new_performance_raw_rows = int(source_meta.get("new_performance_raw_rows", 0) or 0)
+    new_performance_match_rows = int(source_meta.get("new_performance_match_rows", 0) or 0)
     raw_sheet_shapes = str(source_meta.get("raw_sheet_shapes", ""))
 
     st.markdown(
@@ -390,6 +392,7 @@ def render_header(source_meta: pd.Series, matched_df: pd.DataFrame) -> None:
                 <div class="badge">최신 수집일: {latest_collection_date or "미기재"}</div>
                 <div class="badge">빌드: {APP_VERSION}</div>
                 <div class="badge">성과 원본/정리 행: {performance_raw_rows}/{performance_rows}</div>
+                <div class="badge">2026.07 원본/매칭: {new_performance_raw_rows}/{new_performance_match_rows}</div>
             </div>
         </div>
         """,
@@ -408,6 +411,8 @@ def render_header(source_meta: pd.Series, matched_df: pd.DataFrame) -> None:
             {
                 "성과 시트": performance_sheets,
                 "성과 시트 행수": performance_sheet_shapes,
+                "2026.07 원본 행": new_performance_raw_rows,
+                "2026.07 매칭 행": new_performance_match_rows,
                 "전체 원본 시트 행수": raw_sheet_shapes,
                 "로드 오류": load_errors,
             }

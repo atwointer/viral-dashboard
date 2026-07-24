@@ -121,12 +121,27 @@ def load_data() -> dict[str, pd.DataFrame]:
         f"{sheet_name}: {raw_data.get(sheet_name, pd.DataFrame()).shape[0]}x{raw_data.get(sheet_name, pd.DataFrame()).shape[1]}"
         for sheet_name in sheets.performance
     )
+    new_performance_sheets = [
+        sheet_name
+        for sheet_name in sheets.performance
+        if "2026.07" in sheet_name
+    ]
+    new_performance_raw_rows = sum(
+        len(raw_data.get(sheet_name, pd.DataFrame()))
+        for sheet_name in new_performance_sheets
+    )
     if performance_raw.empty:
         load_errors.append("성과 원본 행 0건: 바이럴 효율 시트를 읽지 못했습니다.")
     elif performance_df.empty:
         load_errors.append("성과 정리 행 0건: 바이럴 효율 시트 컬럼명을 인식하지 못했습니다.")
 
     matched_df, unmatched_df = match_paid_with_performance(paid_df, performance_df)
+    new_performance_match_rows = int(
+        matched_df["match_method"]
+        .fillna("")
+        .isin(["worker_keyword_key", "combined_worker_keyword_key", "worker_only_key"])
+        .sum()
+    )
 
     if performance_collection_dates.notna().any():
         latest_collection_date = performance_collection_dates.max().strftime("%Y-%m-%d")
@@ -148,6 +163,9 @@ def load_data() -> dict[str, pd.DataFrame]:
                 "performance_sheet_shapes": performance_sheet_shapes,
                 "performance_raw_rows": len(performance_raw),
                 "performance_rows": len(performance_df),
+                "new_performance_sheets": " | ".join(new_performance_sheets),
+                "new_performance_raw_rows": new_performance_raw_rows,
+                "new_performance_match_rows": new_performance_match_rows,
                 "paid_rows": len(paid_df),
                 "matched_rows": len(matched_df),
             }
@@ -770,6 +788,8 @@ def extract_collection_date(df: pd.DataFrame) -> pd.Series:
         "조회종료일",
         "집계일",
         "기준일",
+        "날짜",
+        "일자",
         "date",
         "collectedat",
     }
