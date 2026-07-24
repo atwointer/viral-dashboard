@@ -376,8 +376,12 @@ def match_paid_with_performance(
         return empty, empty.copy()
 
     perf_lookup = performance_df.copy()
-    # 날짜 없는 성과행은 작업 시점을 특정할 수 없어 매칭에서 제외(미매칭 처리)
-    perf_lookup = perf_lookup[perf_lookup["nt_keyword"].map(keyword_has_date)].copy()
+    # Keep dated legacy rows, plus the new 2026.07+ rows that have no channel
+    # and must be matched by worker/keyword only.
+    perf_lookup = perf_lookup[
+        perf_lookup["nt_keyword"].map(keyword_has_date)
+        | perf_lookup["nt_source"].eq("")
+    ].copy()
     perf_lookup["match_key"] = perf_lookup.apply(
         lambda row: build_match_key(row["nt_source"], row["nt_detail"], row["nt_keyword"]),
         axis=1,
@@ -387,11 +391,19 @@ def match_paid_with_performance(
         lambda row: build_worker_keyword_key(row["nt_detail"], row["nt_keyword"]),
         axis=1,
     )
+    perf_lookup["combined_worker_keyword_key"] = perf_lookup.apply(
+        lambda row: build_combined_worker_keyword_key(row["nt_detail"], row["nt_keyword"]),
+        axis=1,
+    )
     perf_map = perf_lookup.set_index("match_key").to_dict(orient="index")
-    perf_worker_keyword_map = (
-        perf_lookup.loc[perf_lookup["nt_source"].eq("")]
-        .set_index("worker_keyword_key")
-        .to_dict(orient="index")
+    worker_keyword_lookup = perf_lookup.loc[perf_lookup["nt_source"].eq("")].copy()
+    perf_worker_keyword_map = build_fallback_lookup_map(
+        worker_keyword_lookup,
+        "worker_keyword_key",
+    )
+    perf_combined_worker_keyword_map = build_fallback_lookup_map(
+        worker_keyword_lookup,
+        "combined_worker_keyword_key",
     )
     perf_candidates = perf_lookup.to_dict(orient="records")
     used_perf_keys: set[str] = set()
@@ -418,6 +430,18 @@ def match_paid_with_performance(
                 matched = fallback
                 matched_source = row["match_nt_source"]
                 match_method = "worker_keyword_key"
+                used_perf_keys.add(fallback.get("match_key", ""))
+
+        if matched is None:
+            combined_worker_keyword_key = build_combined_worker_keyword_key(
+                row["match_nt_detail"],
+                row["match_nt_keyword"],
+            )
+            fallback = perf_combined_worker_keyword_map.get(combined_worker_keyword_key)
+            if fallback is not None and fallback.get("match_key", "") not in used_perf_keys:
+                matched = fallback
+                matched_source = row["match_nt_source"]
+                match_method = "combined_worker_keyword_key"
                 used_perf_keys.add(fallback.get("match_key", ""))
 
         if matched is None:
@@ -514,6 +538,46 @@ def collapse_duplicate_match_keys(perf_lookup: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def build_fallback_lookup_map(perf_lookup: pd.DataFrame, lookup_column: str) -> dict[str, dict]:
+    if perf_lookup.empty or lookup_column not in perf_lookup.columns:
+        return {}
+
+    lookup_df = perf_lookup.loc[perf_lookup[lookup_column].map(clean_text).ne("")].copy()
+    if lookup_df.empty:
+        return {}
+
+    def first_non_empty(values: pd.Series) -> str:
+        for value in values:
+            cleaned = clean_text(value)
+            if cleaned:
+                return cleaned
+        return ""
+
+    def join_non_empty(values: pd.Series) -> str:
+        cleaned_values = [clean_text(value) for value in values]
+        return " | ".join(value for value in cleaned_values if value)
+
+    aggregations = {
+        "nt_source": first_non_empty,
+        "nt_detail": first_non_empty,
+        "nt_keyword": first_non_empty,
+        "perf_debug_rows": join_non_empty,
+        "perf_latest_collected_at": first_non_empty,
+    }
+    for metric in PERFORMANCE_METRICS:
+        aggregations[metric] = "sum"
+
+    collapsed = (
+        lookup_df.groupby(lookup_column, dropna=False, as_index=False)
+        .agg(aggregations)
+        .reset_index(drop=True)
+    )
+    collapsed["match_key"] = collapsed[lookup_column].map(
+        lambda value: f"{lookup_column}:{clean_text(value)}"
+    )
+    return collapsed.set_index(lookup_column).to_dict(orient="index")
+
+
 def build_nt_source_candidates(row: pd.Series) -> list[str]:
     platform_group = clean_text(row.get("platform_group", ""))
     platform_value = clean_text(row.get("platform", ""))
@@ -553,6 +617,11 @@ def build_worker_keyword_key(nt_detail: str, nt_keyword: str) -> str:
             normalize_keyword_token(nt_keyword),
         ]
     )
+
+
+def build_combined_worker_keyword_key(nt_detail: str, nt_keyword: str) -> str:
+    combined = f"{normalize_match_text(nt_detail)}{normalize_match_text(nt_keyword)}"
+    return re.sub(r"[^a-z0-9\uac00-\ud7a3]", "", combined)
 
 
 # 완료시트(한글)와 성과DB(영어)의 제품 표기 차이를 흡수하기 위한 치환표
