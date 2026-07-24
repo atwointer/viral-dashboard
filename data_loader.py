@@ -398,6 +398,7 @@ def match_paid_with_performance(
         lambda row: build_combined_worker_keyword_key(row["nt_detail"], row["nt_keyword"]),
         axis=1,
     )
+    perf_lookup["worker_only_key"] = perf_lookup["nt_detail"].map(build_worker_only_key)
     perf_map = perf_lookup.set_index("match_key").to_dict(orient="index")
     worker_keyword_lookup = perf_lookup.loc[perf_lookup["nt_source"].eq("")].copy()
     perf_worker_keyword_map = build_fallback_lookup_map(
@@ -407,6 +408,10 @@ def match_paid_with_performance(
     perf_combined_worker_keyword_map = build_fallback_lookup_map(
         worker_keyword_lookup,
         "combined_worker_keyword_key",
+    )
+    perf_worker_only_map = build_fallback_lookup_map(
+        worker_keyword_lookup,
+        "worker_only_key",
     )
     perf_candidates = perf_lookup.to_dict(orient="records")
     used_perf_keys: set[str] = set()
@@ -444,6 +449,14 @@ def match_paid_with_performance(
                 matched = fallback
                 matched_source = row["match_nt_source"]
                 match_method = "combined_worker_keyword_key"
+
+        if matched is None:
+            worker_only_key = build_worker_only_key(row["match_nt_detail"])
+            fallback = perf_worker_only_map.get(worker_only_key)
+            if fallback is not None:
+                matched = fallback
+                matched_source = row["match_nt_source"]
+                match_method = "worker_only_key"
 
         if matched is None:
             reverse_match = find_reverse_match(row, perf_candidates, used_perf_keys)
@@ -623,6 +636,10 @@ def build_worker_keyword_key(nt_detail: str, nt_keyword: str) -> str:
 def build_combined_worker_keyword_key(nt_detail: str, nt_keyword: str) -> str:
     combined = f"{normalize_match_text(nt_detail)}{normalize_match_text(nt_keyword)}"
     return re.sub(r"[^a-z0-9\uac00-\ud7a3]", "", combined)
+
+
+def build_worker_only_key(nt_detail: str) -> str:
+    return re.sub(r"[^a-z0-9\uac00-\ud7a3]", "", normalize_match_text(nt_detail))
 
 
 # 완료시트(한글)와 성과DB(영어)의 제품 표기 차이를 흡수하기 위한 치환표
