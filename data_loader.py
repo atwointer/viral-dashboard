@@ -82,6 +82,10 @@ class WorkbookSheets:
 def load_data() -> dict[str, pd.DataFrame]:
     raw_data, load_errors = load_google_public_sheets_data()
     sheets = identify_sheets(raw_data.keys())
+    raw_sheet_shapes = " | ".join(
+        f"{sheet_name}: {frame.shape[0]}x{frame.shape[1]}"
+        for sheet_name, frame in raw_data.items()
+    )
 
     paid_frames: list[pd.DataFrame] = []
     for platform_group, sheet_name in sheets.paid.items():
@@ -113,6 +117,14 @@ def load_data() -> dict[str, pd.DataFrame]:
     )
     performance_collection_dates = extract_collection_date(performance_raw)
     performance_df = finalize_performance_df(performance_raw)
+    performance_sheet_shapes = " | ".join(
+        f"{sheet_name}: {raw_data.get(sheet_name, pd.DataFrame()).shape[0]}x{raw_data.get(sheet_name, pd.DataFrame()).shape[1]}"
+        for sheet_name in sheets.performance
+    )
+    if performance_raw.empty:
+        load_errors.append("성과 원본 행 0건: 바이럴 효율 시트를 읽지 못했습니다.")
+    elif performance_df.empty:
+        load_errors.append("성과 정리 행 0건: 바이럴 효율 시트 컬럼명을 인식하지 못했습니다.")
 
     matched_df, unmatched_df = match_paid_with_performance(paid_df, performance_df)
 
@@ -131,6 +143,13 @@ def load_data() -> dict[str, pd.DataFrame]:
                 "latest_collection_date": latest_collection_date,
                 "earliest_collection_date": earliest_collection_date,
                 "load_errors": " | ".join(load_errors),
+                "raw_sheet_shapes": raw_sheet_shapes,
+                "performance_sheets": " | ".join(sheets.performance),
+                "performance_sheet_shapes": performance_sheet_shapes,
+                "performance_raw_rows": len(performance_raw),
+                "performance_rows": len(performance_df),
+                "paid_rows": len(paid_df),
+                "matched_rows": len(matched_df),
             }
         ]
     )
