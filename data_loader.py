@@ -26,7 +26,7 @@ PAID_SHEETS = {
 }
 PERFORMANCE_SHEETS = [
     {"gid": "1675730631", "sheet_name": "(DB)바이럴 효율(~2026.06)"},
-    {"sheet_name": "(DB)바이럴 효율(2026.07~)"},
+    {"gid": "505488648", "sheet_name": "(DB)바이럴 효율(2026.07~)"},
     {"sheet_name": "(DB)바이럴효율(2026.07~)"},
     {"sheet_name": "(DB)바이럴 효율 (2026.07~)"},
     {"sheet_name": "(DB)바이럴효율 (2026.07~)"},
