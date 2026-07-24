@@ -136,10 +136,20 @@ def load_data() -> dict[str, pd.DataFrame]:
         load_errors.append("성과 정리 행 0건: 바이럴 효율 시트 컬럼명을 인식하지 못했습니다.")
 
     matched_df, unmatched_df = match_paid_with_performance(paid_df, performance_df)
+    matched_df = apply_new_performance_overlay(
+        matched_df,
+        performance_raw,
+        new_performance_sheets,
+    )
+    unmatched_df = matched_df.loc[matched_df["match_status"] == "미매칭"].copy()
     new_performance_match_rows = int(
         matched_df["match_method"]
         .fillna("")
-        .isin(["worker_keyword_key", "combined_worker_keyword_key", "worker_only_key"])
+        .isin([
+            "202607_worker_keyword",
+            "202607_combined_worker_keyword",
+            "202607_worker_only",
+        ])
         .sum()
     )
 
@@ -569,6 +579,73 @@ def match_paid_with_performance(
     matched_df = pd.DataFrame(records)
     unmatched_df = matched_df.loc[matched_df["match_status"] == "미매칭"].copy()
     return matched_df, unmatched_df
+
+
+def apply_new_performance_overlay(
+    matched_df: pd.DataFrame,
+    performance_raw: pd.DataFrame,
+    new_performance_sheets: list[str],
+) -> pd.DataFrame:
+    if matched_df.empty or performance_raw.empty or not new_performance_sheets:
+        return matched_df
+
+    source_series = get_series_by_alias(performance_raw, ["__performance_sheet"]).map(clean_text)
+    new_raw = performance_raw.loc[source_series.isin(new_performance_sheets)].copy()
+    if new_raw.empty:
+        return matched_df
+
+    new_performance = finalize_performance_df(new_raw)
+    if new_performance.empty:
+        return matched_df
+
+    lookup = new_performance.copy()
+    lookup["worker_keyword_key"] = lookup.apply(
+        lambda row: build_worker_keyword_key(row["nt_detail"], row["nt_keyword"]),
+        axis=1,
+    )
+    lookup["combined_worker_keyword_key"] = lookup.apply(
+        lambda row: build_combined_worker_keyword_key(row["nt_detail"], row["nt_keyword"]),
+        axis=1,
+    )
+    lookup["worker_only_key"] = lookup["nt_detail"].map(build_worker_only_key)
+
+    worker_keyword_map = build_fallback_lookup_map(lookup, "worker_keyword_key")
+    combined_map = build_fallback_lookup_map(lookup, "combined_worker_keyword_key")
+    worker_only_map = build_fallback_lookup_map(lookup, "worker_only_key")
+
+    result = matched_df.copy()
+    for index, row in result.iterrows():
+        matched = None
+        method = ""
+
+        worker_keyword_key = build_worker_keyword_key(row["match_nt_detail"], row["match_nt_keyword"])
+        matched = worker_keyword_map.get(worker_keyword_key)
+        method = "202607_worker_keyword" if matched is not None else ""
+
+        if matched is None:
+            combined_key = build_combined_worker_keyword_key(row["match_nt_detail"], row["match_nt_keyword"])
+            matched = combined_map.get(combined_key)
+            method = "202607_combined_worker_keyword" if matched is not None else ""
+
+        if matched is None:
+            worker_key = build_worker_only_key(row["match_nt_detail"])
+            matched = worker_only_map.get(worker_key)
+            method = "202607_worker_only" if matched is not None else ""
+
+        if matched is None:
+            continue
+
+        for metric in PERFORMANCE_METRICS:
+            result.at[index, metric] = matched.get(metric, 0)
+        result.at[index, "match_status"] = "매칭"
+        result.at[index, "is_matched"] = True
+        result.at[index, "matched_nt_source"] = row.get("match_nt_source", "")
+        result.at[index, "match_method"] = method
+        result.at[index, "perf_debug_rows"] = matched.get("perf_debug_rows", "")
+        result.at[index, "perf_latest_collected_at"] = matched.get("perf_latest_collected_at", "")
+        result.at[index, "unmatched_reason"] = ""
+
+    return result
 
 
 def build_primary_nt_source(row: pd.Series) -> str:
