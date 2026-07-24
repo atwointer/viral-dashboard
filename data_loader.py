@@ -6,6 +6,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Iterable
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 
 import pandas as pd
 
@@ -21,7 +22,10 @@ PAID_SHEETS = {
     "커뮤니티": {"gid": "1056422214", "sheet_name": "(DB)커뮤니티"},
     "브랜드커넥트": {"gid": "255349713", "sheet_name": "(DB)브랜드커넥트"},
 }
-PERFORMANCE_SHEET = {"gid": "1675730631", "sheet_name": "(DB)바이럴효율"}
+PERFORMANCE_SHEETS = [
+    {"gid": "1675730631", "sheet_name": "(DB)바이럴 효율(~2026.06)"},
+    {"sheet_name": "(DB)바이럴 효율(2026.07~)"},
+]
 
 PAID_COLUMNS = [
     "row_id",
@@ -67,7 +71,7 @@ MAX_VALUE_METRICS = [
 @dataclass(frozen=True)
 class WorkbookSheets:
     paid: dict[str, str]
-    performance: str
+    performance: list[str]
 
 
 def load_data() -> dict[str, pd.DataFrame]:
@@ -91,7 +95,17 @@ def load_data() -> dict[str, pd.DataFrame]:
     )
     paid_df = finalize_paid_df(paid_df)
 
-    performance_raw = raw_data.get(sheets.performance, pd.DataFrame())
+    performance_frames = []
+    for sheet_name in sheets.performance:
+        frame = raw_data.get(sheet_name, pd.DataFrame()).copy()
+        if not frame.empty:
+            frame["__performance_sheet"] = sheet_name
+            performance_frames.append(frame)
+    performance_raw = (
+        pd.concat(performance_frames, ignore_index=True)
+        if performance_frames
+        else pd.DataFrame()
+    )
     performance_collection_dates = extract_collection_date(performance_raw)
     performance_df = finalize_performance_df(performance_raw)
 
@@ -129,13 +143,22 @@ def build_csv_url(spreadsheet_id: str, gid: str) -> str:
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
 
 
+def build_csv_url_by_sheet_name(spreadsheet_id: str, sheet_name: str) -> str:
+    encoded_sheet = quote(sheet_name, safe="")
+    return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet}"
+
+
 def load_google_public_sheets_data() -> tuple[dict[str, pd.DataFrame], list[str]]:
     data: dict[str, pd.DataFrame] = {}
     errors: list[str] = []
 
-    for sheet_meta in list(PAID_SHEETS.values()) + [PERFORMANCE_SHEET]:
+    for sheet_meta in list(PAID_SHEETS.values()) + PERFORMANCE_SHEETS:
         sheet_name = sheet_meta["sheet_name"]
-        csv_url = build_csv_url(SPREADSHEET_ID, sheet_meta["gid"])
+        csv_url = (
+            build_csv_url(SPREADSHEET_ID, sheet_meta["gid"])
+            if "gid" in sheet_meta
+            else build_csv_url_by_sheet_name(SPREADSHEET_ID, sheet_name)
+        )
         try:
             data[sheet_name] = pd.read_csv(csv_url)
         except pd.errors.EmptyDataError:
@@ -154,10 +177,15 @@ def identify_sheets(sheet_names: Iterable[str]) -> WorkbookSheets:
         for platform_group, meta in PAID_SHEETS.items()
         if meta["sheet_name"] in available
     }
-    performance = PERFORMANCE_SHEET["sheet_name"] if PERFORMANCE_SHEET["sheet_name"] in available else ""
+    performance = [
+        meta["sheet_name"]
+        for meta in PERFORMANCE_SHEETS
+        if meta["sheet_name"] in available
+    ]
 
     if not performance:
-        raise ValueError(f"'{PERFORMANCE_SHEET['sheet_name']}' 시트를 찾지 못했습니다.")
+        expected_names = ", ".join(meta["sheet_name"] for meta in PERFORMANCE_SHEETS)
+        raise ValueError(f"성과 시트를 찾지 못했습니다: {expected_names}")
 
     return WorkbookSheets(paid=paid, performance=performance)
 
@@ -304,6 +332,10 @@ def finalize_performance_df(df: pd.DataFrame) -> pd.DataFrame:
     ).map(normalize_match_text)
     working["collected_at"] = extract_collection_date(working)
     working["row_order"] = range(len(working))
+    working["performance_source_sheet"] = get_series_by_alias(
+        working,
+        ["__performance_sheet"],
+    ).map(clean_text)
 
     for metric in PERFORMANCE_METRICS:
         working[metric] = to_numeric_series(
@@ -319,7 +351,7 @@ def finalize_performance_df(df: pd.DataFrame) -> pd.DataFrame:
         | working["nt_keyword"].ne("")
     ].copy()
 
-    return collapse_cumulative_performance_rows(
+    return collapse_performance_rows(
         working,
         key_columns=["nt_source", "nt_detail", "nt_keyword"],
     )
@@ -351,7 +383,16 @@ def match_paid_with_performance(
         axis=1,
     )
     perf_lookup = collapse_duplicate_match_keys(perf_lookup)
+    perf_lookup["worker_keyword_key"] = perf_lookup.apply(
+        lambda row: build_worker_keyword_key(row["nt_detail"], row["nt_keyword"]),
+        axis=1,
+    )
     perf_map = perf_lookup.set_index("match_key").to_dict(orient="index")
+    perf_worker_keyword_map = (
+        perf_lookup.loc[perf_lookup["nt_source"].eq("")]
+        .set_index("worker_keyword_key")
+        .to_dict(orient="index")
+    )
     perf_candidates = perf_lookup.to_dict(orient="records")
     used_perf_keys: set[str] = set()
 
@@ -369,6 +410,15 @@ def match_paid_with_performance(
                 match_method = "direct_key"
                 used_perf_keys.add(key)
                 break
+
+        if matched is None:
+            worker_keyword_key = build_worker_keyword_key(row["match_nt_detail"], row["match_nt_keyword"])
+            fallback = perf_worker_keyword_map.get(worker_keyword_key)
+            if fallback is not None and fallback.get("match_key", "") not in used_perf_keys:
+                matched = fallback
+                matched_source = row["match_nt_source"]
+                match_method = "worker_keyword_key"
+                used_perf_keys.add(fallback.get("match_key", ""))
 
         if matched is None:
             reverse_match = find_reverse_match(row, perf_candidates, used_perf_keys)
@@ -496,6 +546,15 @@ def build_match_key(nt_source: str, nt_detail: str, nt_keyword: str) -> str:
     )
 
 
+def build_worker_keyword_key(nt_detail: str, nt_keyword: str) -> str:
+    return "||".join(
+        [
+            normalize_match_text(nt_detail),
+            normalize_keyword_token(nt_keyword),
+        ]
+    )
+
+
 # 완료시트(한글)와 성과DB(영어)의 제품 표기 차이를 흡수하기 위한 치환표
 KEYWORD_KO_EN = {
     "오픈이어": "openear",
@@ -579,6 +638,78 @@ def extract_collection_date(df: pd.DataFrame) -> pd.Series:
         if sanitize_column_name(column) in candidate_columns:
             return parse_flexible_date_series(df[column])
     return pd.Series([pd.NaT] * len(df), index=df.index, dtype="datetime64[ns]")
+
+
+def collapse_performance_rows(
+    working: pd.DataFrame,
+    key_columns: list[str],
+) -> pd.DataFrame:
+    if working.empty:
+        return pd.DataFrame(
+            columns=key_columns + PERFORMANCE_METRICS + ["perf_debug_rows", "perf_latest_collected_at"]
+        )
+
+    source_sheet = working.get("performance_source_sheet", pd.Series("", index=working.index)).map(clean_text)
+    daily_mask = source_sheet.str.contains("2026.07", na=False)
+    frames: list[pd.DataFrame] = []
+
+    legacy_rows = working.loc[~daily_mask].copy()
+    if not legacy_rows.empty:
+        frames.append(collapse_cumulative_performance_rows(legacy_rows, key_columns))
+
+    daily_rows = working.loc[daily_mask].copy()
+    if not daily_rows.empty:
+        frames.append(collapse_summed_performance_rows(daily_rows, key_columns))
+
+    if not frames:
+        return pd.DataFrame(
+            columns=key_columns + PERFORMANCE_METRICS + ["perf_debug_rows", "perf_latest_collected_at"]
+        )
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def collapse_summed_performance_rows(
+    working: pd.DataFrame,
+    key_columns: list[str],
+) -> pd.DataFrame:
+    if working.empty:
+        return pd.DataFrame(
+            columns=key_columns + PERFORMANCE_METRICS + ["perf_debug_rows", "perf_latest_collected_at"]
+        )
+
+    grouped = (
+        working.groupby(key_columns, dropna=False, as_index=False)[PERFORMANCE_METRICS]
+        .sum()
+        .fillna(0)
+    )
+
+    debug_rows = []
+    for key_values, group in working.groupby(key_columns, dropna=False, sort=False):
+        if not isinstance(key_values, tuple):
+            key_values = (key_values,)
+        debug_rows.append(
+            dict(
+                zip(key_columns, key_values, strict=False),
+                perf_debug_rows=" | ".join(
+                    group.apply(
+                        lambda row: f"{row.get('nt_source', '')}/{row.get('nt_detail', '')}/{row.get('nt_keyword', '')}",
+                        axis=1,
+                    ).tolist()
+                ),
+            )
+        )
+    debug = pd.DataFrame(debug_rows)
+    latest_dates = (
+        working.groupby(key_columns, dropna=False)["collected_at"]
+        .max()
+        .dt.strftime("%Y-%m-%d")
+        .fillna("")
+        .rename("perf_latest_collected_at")
+        .reset_index()
+    )
+
+    return grouped.merge(debug, on=key_columns, how="left").merge(latest_dates, on=key_columns, how="left")
 
 
 def collapse_cumulative_performance_rows(
