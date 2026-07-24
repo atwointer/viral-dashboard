@@ -25,6 +25,9 @@ PAID_SHEETS = {
 PERFORMANCE_SHEETS = [
     {"gid": "1675730631", "sheet_name": "(DB)바이럴 효율(~2026.06)"},
     {"sheet_name": "(DB)바이럴 효율(2026.07~)"},
+    {"sheet_name": "(DB)바이럴효율(2026.07~)"},
+    {"sheet_name": "(DB)바이럴 효율 (2026.07~)"},
+    {"sheet_name": "(DB)바이럴효율 (2026.07~)"},
 ]
 
 PAID_COLUMNS = [
@@ -324,10 +327,10 @@ def finalize_performance_df(df: pd.DataFrame) -> pd.DataFrame:
     ).map(normalize_nt_source)
     working["nt_detail"] = first_non_empty_series(
         get_series_by_alias(working, ["nt_detail", "ntdetail", "상세", "작업자", "작업자명", "계정"]),
-        get_series_by_alias(working, ["닉네임", "운영자"]),
+        get_series_by_alias(working, ["작업자 이름", "작업자명/키워드", "닉네임", "운영자"]),
     ).map(normalize_match_text)
     working["nt_keyword"] = first_non_empty_series(
-        get_series_by_alias(working, ["nt_keyword", "ntkeyword", "키워드"]),
+        get_series_by_alias(working, ["nt_keyword", "ntkeyword", "키워드", "키보드", "검색어"]),
         get_series_by_alias(working, ["상품명", "상품", "캠페인명"]),
     ).map(normalize_match_text)
     working["collected_at"] = extract_collection_date(working)
@@ -426,11 +429,10 @@ def match_paid_with_performance(
         if matched is None:
             worker_keyword_key = build_worker_keyword_key(row["match_nt_detail"], row["match_nt_keyword"])
             fallback = perf_worker_keyword_map.get(worker_keyword_key)
-            if fallback is not None and fallback.get("match_key", "") not in used_perf_keys:
+            if fallback is not None:
                 matched = fallback
                 matched_source = row["match_nt_source"]
                 match_method = "worker_keyword_key"
-                used_perf_keys.add(fallback.get("match_key", ""))
 
         if matched is None:
             combined_worker_keyword_key = build_combined_worker_keyword_key(
@@ -438,11 +440,10 @@ def match_paid_with_performance(
                 row["match_nt_keyword"],
             )
             fallback = perf_combined_worker_keyword_map.get(combined_worker_keyword_key)
-            if fallback is not None and fallback.get("match_key", "") not in used_perf_keys:
+            if fallback is not None:
                 matched = fallback
                 matched_source = row["match_nt_source"]
                 match_method = "combined_worker_keyword_key"
-                used_perf_keys.add(fallback.get("match_key", ""))
 
         if matched is None:
             reverse_match = find_reverse_match(row, perf_candidates, used_perf_keys)
@@ -847,13 +848,13 @@ def collapse_cumulative_performance_rows(
 
 def performance_metric_aliases(metric: str) -> list[str]:
     aliases = {
-        "customer_count": ["고객수", "고객", "customer_count", "customercount"],
-        "inflow_count": ["유입수", "유입", "inflow_count", "inflowcount"],
-        "page_count": ["페이지수", "클릭수", "page_count", "pagecount", "페이지", "클릭"],
-        "payment_count": ["결제수", "결제건수", "payment_count", "paymentcount"],
-        "payment_amount": ["결제금액", "결제액", "payment_amount", "paymentamount", "매출"],
-        "payment_count_attributed": ["기여결제수", "결제수기여", "payment_count_attributed"],
-        "payment_amount_attributed": ["기여결제금액", "결제금액기여", "payment_amount_attributed"],
+        "customer_count": ["고객수", "고객 수", "고객", "customer_count", "customercount"],
+        "inflow_count": ["유입수", "유입 수", "유입", "inflow_count", "inflowcount"],
+        "page_count": ["페이지수", "페이지 수", "클릭수", "클릭 수", "page_count", "pagecount", "페이지", "클릭"],
+        "payment_count": ["결제수", "결제 수", "결제건수", "결제 건수", "전환수", "전환 수", "payment_count", "paymentcount"],
+        "payment_amount": ["결제금액", "결제 금액", "결제액", "전환금액", "전환 금액", "payment_amount", "paymentamount", "매출"],
+        "payment_count_attributed": ["기여결제수", "기여 결제수", "결제수기여", "결제 수 기여", "payment_count_attributed"],
+        "payment_amount_attributed": ["기여결제금액", "기여 결제금액", "결제금액기여", "결제 금액 기여", "payment_amount_attributed"],
     }
     return aliases[metric]
 
