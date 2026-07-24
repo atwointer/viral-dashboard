@@ -190,7 +190,7 @@ def load_google_public_sheets_data() -> tuple[dict[str, pd.DataFrame], list[str]
 
     for sheet_meta in list(PAID_SHEETS.values()) + PERFORMANCE_SHEETS:
         sheet_name = sheet_meta["sheet_name"]
-        if find_sheet_name(data.keys(), [sheet_name]):
+        if "gid" not in sheet_meta and find_sheet_name(data.keys(), [sheet_name]):
             continue
         csv_url = (
             build_csv_url(SPREADSHEET_ID, sheet_meta["gid"])

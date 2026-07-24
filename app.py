@@ -11,7 +11,7 @@ import streamlit as st
 from data_loader import build_match_key, load_data
 
 
-APP_VERSION = "2026-07-24-load-diagnostics-v3"
+APP_VERSION = "2026-07-24-force-gid-csv-v4"
 
 
 st.set_page_config(
