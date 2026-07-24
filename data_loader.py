@@ -1141,9 +1141,15 @@ def get_series_by_alias(df: pd.DataFrame, aliases: list[str]) -> pd.Series:
         return pd.Series(dtype="object")
 
     normalized_aliases = {sanitize_column_name(alias) for alias in aliases}
+    matching_series = []
     for column in df.columns:
         if sanitize_column_name(column) in normalized_aliases:
-            return ensure_series(df[column])
+            matching_series.append(ensure_series(df[column]))
+    if matching_series:
+        combined = matching_series[0]
+        for series in matching_series[1:]:
+            combined = first_non_empty_series(combined, series)
+        return combined
     return pd.Series([""] * len(df), index=df.index, dtype="object")
 
 
