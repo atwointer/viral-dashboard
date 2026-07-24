@@ -4,9 +4,11 @@ import math
 import re
 import unicodedata
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
+from urllib.request import urlopen
 
 import pandas as pd
 
@@ -151,46 +153,77 @@ def build_csv_url_by_sheet_name(spreadsheet_id: str, sheet_name: str) -> str:
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet}"
 
 
+def build_xlsx_url(spreadsheet_id: str) -> str:
+    return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
+
+
 def load_google_public_sheets_data() -> tuple[dict[str, pd.DataFrame], list[str]]:
     data: dict[str, pd.DataFrame] = {}
     errors: list[str] = []
 
+    try:
+        with urlopen(build_xlsx_url(SPREADSHEET_ID), timeout=20) as response:
+            workbook_bytes = response.read()
+        workbook_data = pd.read_excel(BytesIO(workbook_bytes), sheet_name=None, engine="openpyxl")
+        data.update({sheet_name: frame for sheet_name, frame in workbook_data.items()})
+    except (HTTPError, URLError, TimeoutError, ConnectionError, OSError, ValueError) as exc:
+        errors.append(f"전체 통합문서: {exc.__class__.__name__}")
+
     for sheet_meta in list(PAID_SHEETS.values()) + PERFORMANCE_SHEETS:
         sheet_name = sheet_meta["sheet_name"]
+        if find_sheet_name(data.keys(), [sheet_name]):
+            continue
         csv_url = (
             build_csv_url(SPREADSHEET_ID, sheet_meta["gid"])
             if "gid" in sheet_meta
             else build_csv_url_by_sheet_name(SPREADSHEET_ID, sheet_name)
         )
         try:
-            data[sheet_name] = pd.read_csv(csv_url)
+            frame = pd.read_csv(csv_url)
+            if not frame.empty:
+                data[sheet_name] = frame
         except pd.errors.EmptyDataError:
-            data[sheet_name] = pd.DataFrame()
+            errors.append(f"{sheet_name}: EmptyDataError")
         except (HTTPError, URLError, TimeoutError, ConnectionError, OSError) as exc:
-            data[sheet_name] = pd.DataFrame()
             errors.append(f"{sheet_name}: {exc.__class__.__name__}")
 
     return data, errors
 
 
 def identify_sheets(sheet_names: Iterable[str]) -> WorkbookSheets:
-    available = set(sheet_names)
-    paid = {
-        platform_group: meta["sheet_name"]
-        for platform_group, meta in PAID_SHEETS.items()
-        if meta["sheet_name"] in available
-    }
-    performance = [
-        meta["sheet_name"]
-        for meta in PERFORMANCE_SHEETS
-        if meta["sheet_name"] in available
-    ]
+    available = list(sheet_names)
+    paid = {}
+    for platform_group, meta in PAID_SHEETS.items():
+        matched_name = find_sheet_name(available, [meta["sheet_name"]])
+        if matched_name:
+            paid[platform_group] = matched_name
+
+    performance = []
+    performance_candidates = [meta["sheet_name"] for meta in PERFORMANCE_SHEETS]
+    for sheet_name in available:
+        if is_performance_sheet_name(sheet_name, performance_candidates):
+            performance.append(sheet_name)
 
     if not performance:
         expected_names = ", ".join(meta["sheet_name"] for meta in PERFORMANCE_SHEETS)
         raise ValueError(f"성과 시트를 찾지 못했습니다: {expected_names}")
 
     return WorkbookSheets(paid=paid, performance=performance)
+
+
+def find_sheet_name(sheet_names: Iterable[str], candidates: Iterable[str]) -> str:
+    normalized_candidates = {sanitize_column_name(candidate) for candidate in candidates}
+    for sheet_name in sheet_names:
+        if sanitize_column_name(sheet_name) in normalized_candidates:
+            return sheet_name
+    return ""
+
+
+def is_performance_sheet_name(sheet_name: str, candidates: Iterable[str]) -> bool:
+    normalized = sanitize_column_name(sheet_name)
+    if normalized in {sanitize_column_name(candidate) for candidate in candidates}:
+        return True
+    return "db" in normalized and "바이럴" in normalized and "효율" in normalized
 
 
 def standardize_paid_sheet(df: pd.DataFrame, platform_group: str, sheet_name: str) -> pd.DataFrame:
