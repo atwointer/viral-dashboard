@@ -63,8 +63,8 @@ function renderSummaryRow(rows, columns){
     if(numeric){
       const total = rows.reduce((sum,row)=>sum+(column==='조회수' ? row.views : Number(cellValue(row,column))||0),0);
       content = `<strong>${fmt.format(total)}</strong>`;
-    } else if(column === '콘텐츠 이름') content = '<strong>기간 합계</strong>';
-    else if(index === 0 && !columns.includes('콘텐츠 이름')) content = '<strong>기간 합계</strong>';
+    } else if(column === '콘텐츠 이름') content = `<strong>기간 합계 · ${fmt.format(rows.length)}건</strong>`;
+    else if(index === 0 && !columns.includes('콘텐츠 이름')) content = `<strong>기간 합계 · ${fmt.format(rows.length)}건</strong>`;
     else if(column === '채널') content = `<strong>${fmt.format(rows.length)}건</strong>`;
     return `<td class="${numeric?'number-cell':''}">${content}</td>`;
   }).join('')}</tr>`;
