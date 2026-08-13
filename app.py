@@ -469,45 +469,56 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def render_kpi_section(df: pd.DataFrame) -> None:
-    st.markdown('<div class="section-title">핵심 KPI</div>', unsafe_allow_html=True)
-    primary_metrics, secondary_metrics = build_kpis(df)
+    matched_df = (
+        df[df["is_matched"].fillna(False).astype(bool)].copy()
+        if "is_matched" in df.columns
+        else df.iloc[0:0].copy()
+    )
 
+    st.markdown('<div class="section-title">매칭분 핵심 KPI</div>', unsafe_allow_html=True)
+    primary_metrics, secondary_metrics = build_kpis(matched_df)
     primary_classes = ["primary-a", "primary-b", "primary-c", "primary-d", "primary-c"]
     primary_columns = st.columns(len(primary_metrics))
     for column, metric, card_class in zip(primary_columns, primary_metrics, primary_classes, strict=False):
         with column:
             st.markdown(render_kpi_card(metric, card_class), unsafe_allow_html=True)
 
-    st.markdown('<div class="metric-note">핵심 지표를 먼저 배치했습니다.</div>', unsafe_allow_html=True)
-
     secondary_columns = st.columns(4)
     for column, metric in zip(secondary_columns, secondary_metrics, strict=False):
         with column:
             st.markdown(render_kpi_card(metric, "secondary"), unsafe_allow_html=True)
+
+    st.markdown('<div class="metric-note">매칭된 작업만 기준으로 계산한 KPI입니다.</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title">미매칭 포함 핵심 KPI</div>', unsafe_allow_html=True)
+    all_primary_metrics, all_secondary_metrics = build_kpis(df)
+    all_primary_columns = st.columns(len(all_primary_metrics))
+    for column, metric, card_class in zip(all_primary_columns, all_primary_metrics, primary_classes, strict=False):
+        with column:
+            st.markdown(render_kpi_card(metric, card_class), unsafe_allow_html=True)
+
+    all_secondary_columns = st.columns(4)
+    for column, metric in zip(all_secondary_columns, all_secondary_metrics, strict=False):
+        with column:
+            st.markdown(render_kpi_card(metric, "secondary"), unsafe_allow_html=True)
+
+    st.markdown('<div class="metric-note">미매칭 작업까지 포함한 전체 KPI입니다.</div>', unsafe_allow_html=True)
 
 
 def build_kpis(df: pd.DataFrame) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     total_cost = float(df["cost"].fillna(0).sum())
     total_payment_amount = float(df["payment_amount"].fillna(0).sum())
     total_payment_count = float(df["payment_count"].fillna(0).sum())
-
-    # ROAS는 매칭된 작업만으로 계산 (미매칭은 매출 0이라 효율을 왜곡하므로 제외)
-    if "is_matched" in df.columns:
-        matched_only = df[df["is_matched"].fillna(False).astype(bool)]
-    else:
-        matched_only = df.iloc[0:0]
-    matched_cost = float(matched_only["cost"].fillna(0).sum())
-    matched_payment_amount = float(matched_only["payment_amount"].fillna(0).sum())
-    matched_inflow_count = float(matched_only["inflow_count"].fillna(0).sum())
-    roas_matched = (matched_payment_amount / matched_cost * 100) if matched_cost else 0
-    inflow_efficiency_matched = calculate_inflow_efficiency(matched_cost, matched_inflow_count)
+    total_inflow_count = float(df["inflow_count"].fillna(0).sum())
+    roas = (total_payment_amount / total_cost * 100) if total_cost else 0
+    inflow_efficiency = calculate_inflow_efficiency(total_cost, total_inflow_count)
 
     primary = [
         {"label": "고객수", "value": format_number(df["customer_count"].fillna(0).sum())},
         {"label": "유입수", "value": format_number(df["inflow_count"].fillna(0).sum())},
         {"label": "클릭수", "value": format_number(df["page_count"].fillna(0).sum())},
-        {"label": "ROAS (매칭분)", "value": format_percent(roas_matched)},
-        {"label": "비용대비유입효율률 (매칭분)", "value": format_percent(inflow_efficiency_matched)},
+        {"label": "ROAS", "value": format_percent(roas)},
+        {"label": "비용대비유입효율률", "value": format_percent(inflow_efficiency)},
     ]
     secondary = [
         {"label": "총 비용", "value": format_currency(total_cost)},
