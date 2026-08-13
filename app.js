@@ -1,11 +1,11 @@
 const SHEET_ID = '17JHKjuOtd3EWxylrIgk9XucOMJa8mRqAobEK2J8Fu8A';
 const channels = [
-  { key:'x', label:'X', sheet:'(DB)X 콘텐츠', metric:'누적 노출수', accent:'#171916' },
-  { key:'blog', label:'블로그', sheet:'(DB)블로그 콘텐츠 ', metric:'누적 조회수', accent:'#62b35a' },
-  { key:'instagram', label:'인스타그램', sheet:'(DB)인스타그램 콘텐츠', metric:'누적 조회수', accent:'#ef6c84' },
-  { key:'clip', label:'네이버 클립', sheet:'(DB)네이버클립 콘텐츠', metric:'누적 조회수', accent:'#16c46b' },
-  { key:'tiktok', label:'틱톡', sheet:'(DB)틱톡 콘텐츠', metric:'누적 조회수', accent:'#36c5d7' },
-  { key:'youtube', label:'유튜브', sheet:'(DB)유튜브 콘텐츠', metric:'누적 조회수', accent:'#f04438' }
+  { key:'x', label:'X', gid:'1696115078', metric:'누적 노출수', accent:'#171916' },
+  { key:'blog', label:'블로그', gid:'77634585', metric:'누적 조회수', accent:'#62b35a' },
+  { key:'instagram', label:'인스타그램', gid:'107777181', metric:'누적 조회수', accent:'#ef6c84' },
+  { key:'clip', label:'네이버 클립', gid:'1754976518', metric:'누적 조회수', accent:'#16c46b' },
+  { key:'tiktok', label:'틱톡', gid:'1832815392', metric:'누적 조회수', accent:'#36c5d7' },
+  { key:'youtube', label:'유튜브', gid:'114317153', metric:'누적 조회수', accent:'#f04438' }
 ];
 
 let allData = []; let activeChannel = 'all';
@@ -16,7 +16,10 @@ const fmt = new Intl.NumberFormat('ko-KR');
 
 function parseDate(value){
   if (!value) return null;
-  const match = String(value).trim().match(/(\d{4})[.\/-]\s*(\d{1,2})[.\/-]\s*(\d{1,2})/);
+  const text = String(value).trim();
+  const googleDate = text.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+  if (googleDate) return new Date(Number(googleDate[1]), Number(googleDate[2]), Number(googleDate[3]));
+  const match = text.match(/(\d{4})\s*[.\/-]\s*(\d{1,2})\s*[.\/-]\s*(\d{1,2})/);
   if (!match) return null;
   return new Date(Number(match[1]), Number(match[2])-1, Number(match[3]));
 }
@@ -25,7 +28,7 @@ function displayDate(date){ return date ? `${date.getFullYear()}.${String(date.g
 function escapeHtml(v=''){ return String(v).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 
 async function loadSheet(channel){
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(channel.sheet)}&headers=1`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${channel.gid}&headers=1&_=${Date.now()}`;
   const text = await fetch(url).then(r=>{ if(!r.ok) throw new Error(r.status); return r.text(); });
   const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}')+1));
   const headers = json.table.cols.map(c => c.label || '');
