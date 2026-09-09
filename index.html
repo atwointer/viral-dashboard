@@ -8,9 +8,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
-<body>
+<body class="locked">
+  <div id="authGate" class="auth-gate">
+    <form id="authForm" class="auth-card">
+      <span class="brand-mark">A2</span>
+      <p class="eyebrow">PRIVATE DASHBOARD</p>
+      <h1>Content Pulse</h1>
+      <p>대시보드 암호를 입력해 주세요.</p>
+      <label for="authPassword">암호</label>
+      <input id="authPassword" type="password" autocomplete="current-password" required />
+      <button type="submit">대시보드 열기</button>
+      <p id="authError" class="auth-error" hidden>암호가 올바르지 않습니다.</p>
+    </form>
+  </div>
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="#" aria-label="대시보드 홈">
@@ -78,11 +90,36 @@
         <div id="idRankings" class="id-rankings"></div>
       </section>
 
+      <section class="section-block product-section">
+        <div class="section-heading">
+          <div><p class="eyebrow">PRODUCT PERFORMANCE</p><h2>제품별 성과 비교</h2></div>
+          <p class="section-note">각 시트의 제품 모델 기준</p>
+        </div>
+        <div class="id-search-card">
+          <label for="productSearch">제품 모델 검색</label>
+          <div class="id-search-row">
+            <input id="productSearch" list="productOptions" type="search" placeholder="예: AG0302 TE" autocomplete="off" />
+            <button id="productClear" type="button">초기화</button>
+          </div>
+          <datalist id="productOptions"></datalist>
+        </div>
+        <div id="productPerformance" aria-live="polite"></div>
+        <div id="productRankings" class="id-rankings"></div>
+      </section>
+
       <section class="section-block content-section">
         <div class="section-heading">
           <div><p class="eyebrow">CONTENT LOG</p><h2>시트별 작업 내역</h2></div>
           <p id="resultCount" class="section-note"></p>
         </div>
+        <div class="work-controls">
+          <label><span>플랫폼</span><select id="platformFilter"></select></label>
+          <label><span>제품 모델</span><select id="productFilter"><option value="all">전체 제품</option></select></label>
+          <label><span>콘텐츠 형식</span><select id="formatFilter"><option value="all">전체 형식</option></select></label>
+          <label><span>정렬</span><select id="sortSelect"><option value="date_desc">최신순</option><option value="views_desc">조회수 높은순</option><option value="views_asc">조회수 낮은순</option><option value="er_desc">반응률 높은순</option><option value="er_asc">반응률 낮은순</option></select></label>
+          <label><span>비교 기간</span><select id="compareMode"><option value="none">비교 안 함</option><option value="week">전주 대비</option><option value="month">전월 대비</option><option value="same_month">전월 동일기간 대비</option></select></label>
+        </div>
+        <div id="periodComparison" class="period-comparison"></div>
         <div id="tabs" class="tabs" role="tablist" aria-label="콘텐츠 채널"></div>
         <div class="table-wrap">
           <table>
@@ -96,6 +133,6 @@
 
     <footer><span>ATWO CONTENT TEAM</span><span>Google Sheets 연동 대시보드</span></footer>
   </div>
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
