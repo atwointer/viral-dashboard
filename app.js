@@ -1,18 +1,16 @@
-const SHEET_ID = '17JHKjuOtd3EWxylrIgk9XucOMJa8mRqAobEK2J8Fu8A';
+const SHEET_ID = '1Rq_D6v9maRHbCG-jzCkwPz0EJpAuw5JZXzaPAhZ5lU8';
 const FOLLOWER_SHEET_ID = SHEET_ID;
 const FOLLOWER_SHEET_NAME = '주간 팔로워 추적';
-const STORE_SHEET_ID = '1NeeQNSiG9D9u5U290vyW_LKIn9Siyd9EinwZaUXzIiM';
-const STORE_SHEET_GID = '1064035302';
 const channels = [
-  { key:'x', label:'X', gid:'1696115078', metric:'누적 노출수', accent:'#171916' },
-  { key:'blog', label:'블로그', gid:'77634585', metric:'누적 조회수', accent:'#62b35a' },
-  { key:'instagram', label:'인스타그램', gid:'107777181', metric:'누적 조회수', accent:'#ef6c84' },
-  { key:'clip', label:'네이버 클립', gid:'1754976518', metric:'누적 조회수', accent:'#16c46b' },
-  { key:'tiktok', label:'틱톡', gid:'1832815392', metric:'누적 조회수', accent:'#36c5d7' },
-  { key:'youtube', label:'유튜브', gid:'114317153', metric:'누적 조회수', accent:'#f04438' }
+  { key:'x', label:'X', gid:'767840176', metric:'조회수', accent:'#171916' },
+  { key:'blog', label:'블로그', gid:'985504785', metric:'조회수', accent:'#62b35a' },
+  { key:'instagram', label:'인스타그램', gid:'1290540291', metric:'조회수', accent:'#ef6c84' },
+  { key:'clip', label:'네이버 클립', gid:'38881012', metric:'조회수', accent:'#16c46b' },
+  { key:'tiktok', label:'틱톡', gid:'234211931', metric:'조회수', accent:'#36c5d7' },
+  { key:'youtube', label:'유튜브', gid:'1166931392', metric:'조회수', accent:'#f04438' }
 ];
 
-let allData = []; let activeChannel = 'all'; let followerData = []; let storeData = [];
+let allData = []; let activeChannel = 'all'; let followerData = [];
 const columnsByChannel = {};
 const excludedColumns = new Set(['키워드', '필수 해시태그']);
 const $ = (s) => document.querySelector(s);
@@ -32,6 +30,7 @@ function parseDate(value){
 function iso(date){ return date ? `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}` : ''; }
 function displayDate(date){ return date ? `${date.getFullYear()}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getDate()).padStart(2,'0')}` : '—'; }
 function escapeHtml(v=''){ return String(v).replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function toNumber(value){ return Number(String(value??'').replace(/[^0-9.-]/g,''))||0; }
 
 async function loadSheet(channel){
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${channel.gid}&headers=1&_=${Date.now()}`;
@@ -41,9 +40,9 @@ async function loadSheet(channel){
   columnsByChannel[channel.key] = headers.filter((h,i) => h && !excludedColumns.has(h) && headers.indexOf(h) === i);
   return json.table.rows.map(row => {
     const obj = {}; headers.forEach((h,i)=>{ if(h && obj[h] === undefined) obj[h] = row.c[i]?.v ?? ''; });
-    const title = obj['콘텐츠 이름']; const link = obj['콘텐츠 링크'];
+    const title = obj['콘텐츠 이름(제목)'] || obj['콘텐츠 이름']; const link = obj['콘텐츠 링크'];
     if (!title && !link) return null;
-    return { channel:channel.key, channelLabel:channel.label, date:parseDate(obj['업로드 날짜']), title:title || '(제목 없음)', topic:obj['콘텐츠 주제'] || '미분류', owner:obj['담당자'] || '—', link:link || '', views:Number(obj[channel.metric]) || 0, raw:obj };
+    return { channel:channel.key, channelLabel:channel.label, date:parseDate(obj['업로드 날짜']), title:title || '(제목 없음)', topic:obj['콘텐츠 주제'] || '미분류', owner:obj['담당자'] || '—', link:link || '', views:toNumber(obj[channel.metric]), raw:obj };
   }).filter(Boolean);
 }
 
@@ -51,41 +50,34 @@ async function loadGviz(spreadsheetId, params){
   const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&headers=1&${params}&_=${Date.now()}`;
   const text = await fetch(url).then(r=>{ if(!r.ok) throw new Error(r.status); return r.text(); });
   const json = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}')+1));
-  const headers = json.table.cols.map(c=>c.label||'');
+  const headers = json.table.cols.map(c=>String(c.label||'').replace(/\s+/g,' ').trim());
   return json.table.rows.map(row=>{ const obj={}; headers.forEach((h,i)=>{ if(h&&obj[h]===undefined) obj[h]=row.c[i]?.v??''; }); return obj; });
 }
 
 async function loadFollowers(){
   const rows = await loadGviz(FOLLOWER_SHEET_ID, `sheet=${encodeURIComponent(FOLLOWER_SHEET_NAME)}`);
   if(!rows.length) throw new Error('empty follower sheet');
-  const headers = Object.keys(rows[0]);
-  const dateKey = headers.find(h=>/날짜|일자|주차|기준일/.test(h));
-  const platformKey = headers.find(h=>/플랫폼|채널|매체/.test(h));
-  const followerKey = headers.find(h=>/팔로워|구독자/.test(h));
-  if(platformKey&&followerKey){
-    return rows.map(r=>({date:parseDate(r[dateKey]),platform:String(r[platformKey]||''),value:Number(r[followerKey])||0})).filter(r=>r.date&&r.platform);
-  }
-  const valueKeys=headers.filter(h=>h!==dateKey&&/팔로워|구독자|X|블로그|인스타|클립|틱톡|유튜브/i.test(h));
-  return rows.flatMap(r=>valueKeys.map(key=>({date:parseDate(r[dateKey]),platform:key.replace(/\s*(팔로워|구독자)\s*/g,''),value:Number(r[key])||0}))).filter(r=>r.date);
-}
-
-async function loadStore(){
-  const rows=await loadGviz(STORE_SHEET_ID, `gid=${STORE_SHEET_GID}`);
-  return rows.map(r=>({date:parseDate(r['조회 종료일']),value:Number(r['유입수'])||0})).filter(r=>r.date);
+  return rows.map(r=>({
+    date:parseDate(r['날짜'] || r['줌']), platform:String(r['플랫폼']||'').trim(),
+    followers:toNumber(r['팔로워(구독자) 수'] ?? r['팔로워수']),
+    followerDelta:toNumber(r['전주 대비 구독자증감량'] ?? r['구독자증감량']),
+    inflow:toNumber(r['스토어 유입수'] ?? r['스토어유입수']),
+    inflowDelta:toNumber(r['전주 대비 유입수 증감량'] ?? r['유입수증감량'])
+  })).filter(r=>r.date&&r.platform);
 }
 
 function isNumericColumn(name){ return /수$|전환$/.test(name); }
 function cellValue(row, column){
   if(column === '채널') return row.channelLabel;
   if(column === '업로드 날짜') return displayDate(row.date);
-  if(column === '콘텐츠 이름') return row.title;
+  if(column === '콘텐츠 이름' || column === '콘텐츠 이름(제목)') return row.title;
   return row.raw?.[column] ?? '';
 }
 function renderCell(row, column){
   const value = cellValue(row,column);
   if(column === '콘텐츠 링크') return row.link ? `<a class="view-link" href="${escapeHtml(row.link.trim())}" target="_blank" rel="noopener">열기 ↗</a>` : '—';
   if(column === '콘텐츠 주제') return `<span class="topic-tag">${escapeHtml(value || '미분류')}</span>`;
-  if(column === '콘텐츠 이름') return escapeHtml(value || '(제목 없음)');
+  if(column === '콘텐츠 이름' || column === '콘텐츠 이름(제목)') return escapeHtml(value || '(제목 없음)');
   if(isNumericColumn(column)) return fmt.format(Number(value) || 0);
   return escapeHtml(value || '—');
 }
@@ -96,8 +88,8 @@ function renderSummaryRow(rows, columns){
     if(numeric){
       const total = rows.reduce((sum,row)=>sum+(column==='조회수' ? row.views : Number(cellValue(row,column))||0),0);
       content = `<strong>${fmt.format(total)}</strong>`;
-    } else if(column === '콘텐츠 이름') content = `<strong>기간 합계 · ${fmt.format(rows.length)}건</strong>`;
-    else if(index === 0 && !columns.includes('콘텐츠 이름')) content = `<strong>기간 합계 · ${fmt.format(rows.length)}건</strong>`;
+    } else if(column === '콘텐츠 이름' || column === '콘텐츠 이름(제목)') content = `<strong>기간 합계 · ${fmt.format(rows.length)}건</strong>`;
+    else if(index === 0 && !columns.some(c=>c==='콘텐츠 이름'||c==='콘텐츠 이름(제목)')) content = `<strong>기간 합계 · ${fmt.format(rows.length)}건</strong>`;
     else if(column === '채널') content = `<strong>${fmt.format(rows.length)}건</strong>`;
     return `<td class="${numeric?'number-cell':''}">${content}</td>`;
   }).join('')}</tr>`;
@@ -125,27 +117,28 @@ function comparisonFor(rows,anchor,type){
 }
 function latestDate(rows){ return rows.map(r=>r.date).filter(Boolean).sort((a,b)=>b-a)[0]||null; }
 
-function followerSnapshot(anchor){
+function audiencePeriod(){
+  const start=parseDate($('#startDate').value), end=parseDate($('#endDate').value);
+  return followerData.filter(r=>(!start||r.date>=start)&&(!end||r.date<=end));
+}
+function followerSnapshot(){
+  const periodRows=audiencePeriod();
   const platforms=[...new Set(followerData.map(r=>r.platform))];
   return platforms.map(platform=>{
-    const rows=followerData.filter(r=>r.platform===platform&&(!anchor||r.date<=anchor)).sort((a,b)=>b.date-a.date);
+    const rows=periodRows.filter(r=>r.platform===platform).sort((a,b)=>b.date-a.date);
     if(!rows.length) return null;
-    const current=rows[0], cutoff=shiftDays(current.date,-7), previous=rows.find(r=>r.date<=cutoff);
-    return {platform,value:current.value,previous:previous?.value??0};
+    return {platform,followers:rows[0].followers,delta:rows.reduce((s,r)=>s+r.followerDelta,0),date:rows[0].date};
   }).filter(Boolean);
 }
 function storeSnapshot(){
-  const totals=new Map(); storeData.forEach(r=>totals.set(iso(r.date),(totals.get(iso(r.date))||0)+r.value));
-  const rows=[...totals].map(([date,value])=>({date:parseDate(date),value})).sort((a,b)=>b.date-a.date);
+  const rows=audiencePeriod();
   if(!rows.length) return null;
-  const current=rows[0]; const week=rows.find(r=>r.date<=shiftDays(current.date,-7)); const month=rows.find(r=>r.date<=shiftMonth(current.date,-1));
-  return {current,week,month};
+  return {inflow:rows.reduce((s,r)=>s+r.inflow,0),delta:rows.reduce((s,r)=>s+r.inflowDelta,0),latest:latestDate(rows)};
 }
 function renderAudience(){
-  const anchor=parseDate($('#endDate').value)||latestDate(allData)||new Date();
-  const followers=followerSnapshot(anchor); const store=storeSnapshot();
-  const followerCard=`<article class="audience-card"><h3>플랫폼별 팔로워</h3><div class="follower-list">${followers.length?followers.map(item=>`<div class="follower-item"><span>${escapeHtml(item.platform)}</span><strong>${fmt.format(item.value)}</strong>${trendHtml(item.value,item.previous)}</div>`).join(''):'<p class="section-note">연결된 팔로워 데이터가 없습니다.</p>'}</div></article>`;
-  const storeCard=`<article class="audience-card"><h3>스토어 유입수</h3>${store?`<strong class="store-value">${fmt.format(store.current.value)}</strong><div class="store-trends"><span>전주 ${trendHtml(store.current.value,store.week?.value??0)}</span><span>전월 ${trendHtml(store.current.value,store.month?.value??0)}</span></div><p class="kpi-note">${displayDate(store.current.date)} 집계 기준</p>`:'<p class="section-note">연결된 유입 데이터가 없습니다.</p>'}</article>`;
+  const followers=followerSnapshot(); const store=storeSnapshot();
+  const followerCard=`<article class="audience-card"><h3>플랫폼별 팔로워 · 구독자</h3><div class="follower-list">${followers.length?followers.map(item=>`<div class="follower-item"><span>${escapeHtml(item.platform)} · ${displayDate(item.date)}</span><strong>${fmt.format(item.followers)}</strong><span class="trend ${item.delta>0?'up':item.delta<0?'down':'flat'}">${item.delta>0?'▲':item.delta<0?'▼':'—'}${item.delta===0?'':fmt.format(Math.abs(item.delta))}</span></div>`).join(''):'<p class="section-note">조회 기간의 팔로워 데이터가 없습니다.</p>'}</div></article>`;
+  const storeCard=`<article class="audience-card"><h3>스토어 유입수</h3>${store?`<strong class="store-value">${fmt.format(store.inflow)}</strong><div class="store-trends"><span>유입수 증감량 <b class="trend ${store.delta>0?'up':store.delta<0?'down':'flat'}">${store.delta>0?'▲':store.delta<0?'▼':'—'}${store.delta===0?'':fmt.format(Math.abs(store.delta))}</b></span></div><p class="kpi-note">선택 기간 합계 · 최신 ${displayDate(store.latest)}</p>`:'<p class="section-note">조회 기간의 유입 데이터가 없습니다.</p>'}</article>`;
   const warning=followers.length?'':'<p class="source-warning">‘주간 팔로워 추적’ 시트가 현재 콘텐츠 원본 파일에서 확인되지 않아 팔로워 값은 보류되었습니다. 해당 시트가 있는 Google Sheets 링크를 연결하면 자동 반영됩니다.</p>';
   $('#audienceGrid').innerHTML=followerCard+storeCard+warning;
 }
@@ -154,17 +147,17 @@ function render(){
   $('#kpiGrid').innerHTML = channels.map((ch,i)=>{
     const rows=scoped.filter(r=>r.channel===ch.key); const total=sumMetrics(rows); const allRows=allData.filter(r=>r.channel===ch.key);
     const anchor=parseDate($('#endDate').value)||latestDate(allRows)||new Date(); const week=comparisonFor(allRows,anchor,'week'); const month=comparisonFor(allRows,anchor,'month');
-    return `<article class="kpi-card" style="--accent:${ch.accent}"><div class="kpi-top"><span class="channel">${ch.label}</span><span class="channel-index">0${i+1}</span></div><div class="metric-grid"><div class="metric-item"><span>발행 콘텐츠</span><strong>${fmt.format(total.count)}</strong></div><div class="metric-item"><span>총${ch.key==='x'?'노출':'조회'}수</span><strong>${fmt.format(total.views)}</strong></div><div class="metric-item"><span>콘텐츠당 평균</span><strong>${fmt.format(total.avg)}</strong></div></div><div class="compare-list"><div class="compare-row"><span></span><span class="compare-label">콘텐츠</span><span class="compare-label">총${ch.key==='x'?'노출':'조회'}</span><span class="compare-label">평균</span></div><div class="compare-row"><span class="compare-label">전주</span>${metricCompare('count',week.current.count,week.previous.count)}${metricCompare('views',week.current.views,week.previous.views)}${metricCompare('avg',week.current.avg,week.previous.avg)}</div><div class="compare-row"><span class="compare-label">전월</span>${metricCompare('count',month.current.count,month.previous.count)}${metricCompare('views',month.current.views,month.previous.views)}${metricCompare('avg',month.current.avg,month.previous.avg)}</div></div><p class="kpi-note">증감률은 ${displayDate(anchor)} 기준</p><i class="accent-line"></i></article>`;
+    return `<article class="kpi-card" style="--accent:${ch.accent}"><div class="kpi-top"><span class="channel">${ch.label}</span><span class="channel-index">0${i+1}</span></div><div class="metric-grid"><div class="metric-item"><span>발행 콘텐츠</span><strong>${fmt.format(total.count)}</strong></div><div class="metric-item"><span>총조회수</span><strong>${fmt.format(total.views)}</strong></div><div class="metric-item"><span>콘텐츠당 평균</span><strong>${fmt.format(total.avg)}</strong></div></div><div class="compare-list"><div class="compare-row"><span></span><span class="compare-label">콘텐츠</span><span class="compare-label">총조회</span><span class="compare-label">평균</span></div><div class="compare-row"><span class="compare-label">전주</span>${metricCompare('count',week.current.count,week.previous.count)}${metricCompare('views',week.current.views,week.previous.views)}${metricCompare('avg',week.current.avg,week.previous.avg)}</div><div class="compare-row"><span class="compare-label">전월</span>${metricCompare('count',month.current.count,month.previous.count)}${metricCompare('views',month.current.views,month.previous.views)}${metricCompare('avg',month.current.avg,month.previous.avg)}</div></div><p class="kpi-note">증감률은 ${displayDate(anchor)} 기준</p><i class="accent-line"></i></article>`;
   }).join('');
   const rows = scoped.filter(r=>activeChannel==='all'||r.channel===activeChannel).sort((a,b)=>(b.date||0)-(a.date||0));
   $('#resultCount').textContent = `총 ${fmt.format(rows.length)}건`;
   const columns = activeChannel === 'all'
     ? ['채널','업로드 날짜','콘텐츠 이름','콘텐츠 주제','담당자','조회수','콘텐츠 링크']
-    : (columnsByChannel[activeChannel] || ['담당자','업로드 날짜','콘텐츠 이름','콘텐츠 주제','콘텐츠 링크']);
+    : (columnsByChannel[activeChannel] || ['업로드 날짜','콘텐츠 이름(제목)','콘텐츠 주제','조회수','콘텐츠 링크']);
   $('#contentHead').innerHTML = columns.map(c=>`<th class="${isNumericColumn(c)||c==='조회수'?'number-cell':''}">${c}</th>`).join('');
   const summaryRow = rows.length ? renderSummaryRow(rows,columns) : '';
   $('#contentRows').innerHTML = summaryRow + rows.map(r=>`<tr>${columns.map(c=>{
-    const classes=[c==='업로드 날짜'?'date':'',c==='콘텐츠 이름'?'content-title':'',isNumericColumn(c)||c==='조회수'?'number-cell':''].filter(Boolean).join(' ');
+    const classes=[c==='업로드 날짜'?'date':'',c==='콘텐츠 이름'||c==='콘텐츠 이름(제목)'?'content-title':'',isNumericColumn(c)||c==='조회수'?'number-cell':''].filter(Boolean).join(' ');
     const content = c==='조회수' ? fmt.format(r.views) : renderCell(r,c);
     return `<td class="${classes}">${content}</td>`;
   }).join('')}</tr>`).join('');
@@ -187,8 +180,8 @@ async function init(){
   renderTabs();
   try {
     const results=await Promise.all(channels.map(loadSheet)); allData=results.flat();
-    const extras=await Promise.allSettled([loadFollowers(),loadStore()]);
-    followerData=extras[0].status==='fulfilled'?extras[0].value:[]; storeData=extras[1].status==='fulfilled'?extras[1].value:[];
+    const extras=await Promise.allSettled([loadFollowers()]);
+    followerData=extras[0].status==='fulfilled'?extras[0].value:[];
     const state=$('.sync-state'); state.classList.add('ok'); $('#syncText').textContent=`시트 연동 완료 · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
     render();
   } catch(error) {
