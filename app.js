@@ -42,7 +42,8 @@ async function loadSheet(channel){
     const obj = {}; headers.forEach((h,i)=>{ if(h && obj[h] === undefined) obj[h] = row.c[i]?.v ?? ''; });
     const title = obj['콘텐츠 이름(제목)'] || obj['콘텐츠 이름']; const link = obj['콘텐츠 링크'];
     if (!title && !link) return null;
-    return { channel:channel.key, channelLabel:channel.label, date:parseDate(obj['업로드 날짜']), title:title || '(제목 없음)', topic:obj['콘텐츠 주제'] || '미분류', owner:obj['담당자'] || '—', link:link || '', views:toNumber(obj[channel.metric]), raw:obj };
+    const likes=toNumber(obj['좋아요수']); const comments=toNumber(obj['댓글수']); const other=toNumber(obj['그 외 반응수'] ?? obj['그 외 반응 수']);
+    return { channel:channel.key, channelLabel:channel.label, date:parseDate(obj['업로드 날짜']), contentId:String(obj['콘텐츠 ID']||'').trim(), title:title || '(제목 없음)', topic:obj['콘텐츠 주제'] || '미분류', owner:obj['담당자'] || '—', link:link || '', views:toNumber(obj[channel.metric]), likes, comments, other, reactions:likes+comments+other, raw:obj };
   }).filter(Boolean);
 }
 
@@ -135,6 +136,35 @@ function storeSnapshot(){
   if(!rows.length) return null;
   return {inflow:rows.reduce((s,r)=>s+r.inflow,0),delta:rows.reduce((s,r)=>s+r.inflowDelta,0),latest:latestDate(rows)};
 }
+function aggregateById(rows){
+  const map=new Map();
+  rows.filter(r=>r.contentId).forEach(r=>{
+    if(!map.has(r.contentId)) map.set(r.contentId,{id:r.contentId,rows:[],views:0,likes:0,comments:0,other:0,reactions:0,platforms:new Set()});
+    const item=map.get(r.contentId); item.rows.push(r); item.views+=r.views; item.likes+=r.likes; item.comments+=r.comments; item.other+=r.other; item.reactions+=r.reactions; item.platforms.add(r.channelLabel);
+  });
+  return [...map.values()];
+}
+function chooseContentId(id){ $('#idSearch').value=id; renderIdComparison(); $('#idPerformance').scrollIntoView({behavior:'smooth',block:'center'}); }
+function renderRankList(title,items,metric){
+  return `<article class="rank-card"><h3>${title}</h3>${items.slice(0,5).map((item,i)=>`<div class="rank-row"><span>${i+1}</span><button type="button" data-content-id="${escapeHtml(item.id)}">${escapeHtml(item.id)}</button><strong>${fmt.format(item[metric])}</strong></div>`).join('')||'<p class="section-note">집계할 콘텐츠 ID가 없습니다.</p>'}</article>`;
+}
+function renderIdComparison(){
+  const aggregates=aggregateById(filteredData());
+  const viewsRank=[...aggregates].sort((a,b)=>b.views-a.views); const reactionsRank=[...aggregates].sort((a,b)=>b.reactions-a.reactions);
+  $('#idRankings').innerHTML=renderRankList('총조회수 TOP 콘텐츠 ID',viewsRank,'views')+renderRankList('총반응수 TOP 콘텐츠 ID',reactionsRank,'reactions');
+  document.querySelectorAll('[data-content-id]').forEach(button=>button.onclick=()=>chooseContentId(button.dataset.contentId));
+  const query=$('#idSearch').value.trim().toLowerCase();
+  if(!query){ $('#idPerformance').innerHTML='<p class="id-empty">콘텐츠 ID를 검색하면 여러 플랫폼에 업로드된 동일 콘텐츠의 통합 성과를 확인할 수 있습니다.</p>'; return; }
+  const exact=aggregates.find(item=>item.id.toLowerCase()===query); const matches=aggregates.filter(item=>item.id.toLowerCase().includes(query));
+  if(!exact&&matches.length!==1){
+    $('#idPerformance').innerHTML=matches.length?`<div class="id-empty">일치하는 콘텐츠 ID를 선택해 주세요.<div class="id-match-list">${matches.slice(0,12).map(item=>`<button type="button" data-id-match="${escapeHtml(item.id)}">${escapeHtml(item.id)}</button>`).join('')}</div></div>`:'<p class="id-empty">선택한 기간에 일치하는 콘텐츠 ID가 없습니다.</p>';
+    document.querySelectorAll('[data-id-match]').forEach(button=>button.onclick=()=>chooseContentId(button.dataset.idMatch)); return;
+  }
+  const item=exact||matches[0]; const platformMap=new Map();
+  item.rows.forEach(r=>{ if(!platformMap.has(r.channelLabel)) platformMap.set(r.channelLabel,{platform:r.channelLabel,views:0,reactions:0}); const p=platformMap.get(r.channelLabel); p.views+=r.views; p.reactions+=r.reactions; });
+  const platforms=[...platformMap.values()].sort((a,b)=>b.views-a.views); const maxViews=Math.max(...platforms.map(p=>p.views),1);
+  $('#idPerformance').innerHTML=`<div class="id-result"><div class="id-result-head"><div><p>검색 결과</p><h3>${escapeHtml(item.id)}</h3></div><p>${escapeHtml(item.rows[0]?.title||'')}</p></div><div class="id-summary"><article class="id-summary-card"><span>업로드 플랫폼 수</span><strong>${fmt.format(item.platforms.size)}</strong></article><article class="id-summary-card"><span>총조회수</span><strong>${fmt.format(item.views)}</strong></article><article class="id-summary-card"><span>총반응수</span><strong>${fmt.format(item.reactions)}</strong><small>좋아요 ${fmt.format(item.likes)} + 댓글 ${fmt.format(item.comments)} + 그 외 ${fmt.format(item.other)}</small></article></div><article class="platform-compare"><h3>플랫폼별 도달·반응 효율</h3>${platforms.map(p=>`<div class="platform-row"><strong>${escapeHtml(p.platform)}</strong><div class="platform-bar"><i style="width:${(p.views/maxViews*100).toFixed(1)}%"></i></div><span>조회 ${fmt.format(p.views)}</span><span class="platform-rate">반응률 ${p.views?(p.reactions/p.views*100).toFixed(2):'0.00'}%</span></div>`).join('')}</article></div>`;
+}
 function renderAudience(){
   const followers=followerSnapshot(); const store=storeSnapshot();
   const followerCard=`<article class="audience-card"><h3>플랫폼별 팔로워 · 구독자</h3><div class="follower-list">${followers.length?followers.map(item=>`<div class="follower-item"><span>${escapeHtml(item.platform)} · ${displayDate(item.date)}</span><strong>${fmt.format(item.followers)}</strong><span class="trend ${item.delta>0?'up':item.delta<0?'down':'flat'}">${item.delta>0?'▲':item.delta<0?'▼':'—'}${item.delta===0?'':fmt.format(Math.abs(item.delta))}</span></div>`).join(''):'<p class="section-note">조회 기간의 팔로워 데이터가 없습니다.</p>'}</div></article>`;
@@ -165,6 +195,7 @@ function render(){
   const start=$('#startDate').value, end=$('#endDate').value;
   $('#periodLabel').textContent = start||end ? `${start||'처음'} — ${end||'현재'}` : '전체 업로드 기간';
   renderAudience();
+  renderIdComparison();
 }
 function renderTabs(){
   $('#tabs').innerHTML=[{key:'all',label:'전체'},...channels].map(c=>`<button class="tab ${c.key===activeChannel?'active':''}" data-channel="${c.key}" role="tab">${c.label}</button>`).join('');
@@ -182,6 +213,7 @@ async function init(){
     const results=await Promise.all(channels.map(loadSheet)); allData=results.flat();
     const extras=await Promise.allSettled([loadFollowers()]);
     followerData=extras[0].status==='fulfilled'?extras[0].value:[];
+    $('#contentIdOptions').innerHTML=[...new Set(allData.map(r=>r.contentId).filter(Boolean))].sort().map(id=>`<option value="${escapeHtml(id)}"></option>`).join('');
     const state=$('.sync-state'); state.classList.add('ok'); $('#syncText').textContent=`시트 연동 완료 · ${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}`;
     render();
   } catch(error) {
@@ -192,4 +224,6 @@ async function init(){
 ['startDate','endDate'].forEach(id=>$('#'+id).addEventListener('change',render));
 $('#resetButton').onclick=()=>{$('#startDate').value='';$('#endDate').value='';render();};
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>setRange(b.dataset.range));
+$('#idSearch').addEventListener('input',renderIdComparison);
+$('#idClear').onclick=()=>{$('#idSearch').value='';renderIdComparison();};
 init();

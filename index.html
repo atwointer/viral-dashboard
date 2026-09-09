@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
   <div class="shell">
@@ -61,6 +61,23 @@
         <div id="audienceGrid" class="audience-grid" aria-live="polite"></div>
       </section>
 
+      <section class="section-block reuse-section">
+        <div class="section-heading">
+          <div><p class="eyebrow">ONE SOURCE MULTI-USE</p><h2>콘텐츠 ID별 성과 비교</h2></div>
+          <p class="section-note">선택한 조회 기간 적용</p>
+        </div>
+        <div class="id-search-card">
+          <label for="idSearch">콘텐츠 ID 검색</label>
+          <div class="id-search-row">
+            <input id="idSearch" list="contentIdOptions" type="search" placeholder="예: 260901_T1" autocomplete="off" />
+            <button id="idClear" type="button">초기화</button>
+          </div>
+          <datalist id="contentIdOptions"></datalist>
+        </div>
+        <div id="idPerformance" aria-live="polite"></div>
+        <div id="idRankings" class="id-rankings"></div>
+      </section>
+
       <section class="section-block content-section">
         <div class="section-heading">
           <div><p class="eyebrow">CONTENT LOG</p><h2>시트별 작업 내역</h2></div>
@@ -79,6 +96,6 @@
 
     <footer><span>ATWO CONTENT TEAM</span><span>Google Sheets 연동 대시보드</span></footer>
   </div>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
